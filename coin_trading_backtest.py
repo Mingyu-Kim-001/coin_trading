@@ -62,48 +62,7 @@ class market_neutral_trading_backtest_binance:
         df_standardized_weight = df_rank.sub(df_rank_mean, axis=0).div(df_rank_normalizer, axis=0).fillna(0)
         return df_standardized_weight
 
-if __name__ == '__main__':
-    import datetime
-    pd.set_option('display.max_columns', 500)
-    pd.set_option('display.width', 1000)
-    backtest = market_neutral_trading_backtest_binance()
-    alpha_collection = Alphas()
-    alpha_org_names = [alpha_name for alpha_name in alpha_collection.__dir__() if not alpha_name.startswith('__')]
-    dict_alphas = {}
-    for alpha_name in alpha_org_names:
-        if 'nday' in alpha_name:
-            for n in list(range(1, 10)) + list(range(10, 100, 10)):
-                dict_alphas[alpha_name + f'_{n}'] = (lambda name, n: lambda x: getattr(alpha_collection, name)(x, n))(alpha_name, n)
-        else:
-            dict_alphas[alpha_name] = getattr(alpha_collection, alpha_name)
-    dict_df_klines = {}
-    start_date = datetime.date(2017, 8, 17)
-    end_date = datetime.date(2022, 5, 1)
-    print(f'past {start_date} ~ {end_date}')
-    symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT']
-    for symbol in symbols:
-        dict_df_klines[symbol] = backtest.get_binance_klines_data_1d(symbol, start_date, end_date)
-    df_date = list(dict_df_klines.values())[0]['date']
-    df_close = pd.concat([df_klines['close'].astype('float').rename(f'{symbol}_close') for symbol, df_klines in dict_df_klines.items()], axis=1)
-    for alpha_name, alpha in dict_alphas.items():
-        df_rank = alpha(dict_df_klines)
-        final_return = backtest.backtest_coin_strategy(df_rank, df_date, df_close, symbols)['cumulative_return'].iloc[-1]
-        print(alpha_name, 'final return', round(final_return, 2))
 
-
-    start_date = datetime.date(2022, 5, 2)
-    end_date = datetime.date(2023, 5, 1)
-    is_future = True
-    print(f'recent {start_date} ~ {end_date}')
-    symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT']
-    for symbol in symbols:
-        dict_df_klines[symbol] = backtest.get_binance_klines_data_1d(symbol, start_date, end_date, is_future)
-    df_date = list(dict_df_klines.values())[0]['date']
-    df_close = pd.concat([df_klines['close'].astype('float').rename(f'{symbol}_close') for symbol, df_klines in dict_df_klines.items()], axis=1)
-    for alpha_name, alpha in dict_alphas.items():
-        df_rank = alpha(dict_df_klines)
-        final_return = backtest.backtest_coin_strategy(df_rank, df_date, df_close, symbols)['cumulative_return'].iloc[-1]
-        print(alpha_name, 'final return', round(final_return, 2))
 
 
 
