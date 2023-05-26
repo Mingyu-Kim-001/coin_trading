@@ -1,7 +1,7 @@
 import pandas as pd
 class Alphas:
     def __init__(self):
-        self.alpha_list = ['simple_momentum_strategy', 'simple_regression_strategy', 'simple_momentum_nday_strategy']
+        pass
 
     def simple_momentum_strategy(self, dict_df_klines: dict):
         df_agg = pd.concat(
