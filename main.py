@@ -28,8 +28,10 @@ df_close = pd.concat(
     axis=1)
 for alpha_name, alpha in dict_alphas.items():
     df_rank = alpha(dict_df_klines)
-    final_return = backtest.backtest_coin_strategy(df_rank, df_date, df_close, symbols)['cumulative_return'].iloc[-1]
-    print(alpha_name, 'final return', round(final_return, 2))
+    backtest_result = backtest.backtest_coin_strategy(df_rank, df_date, df_close, symbols)
+    final_return = backtest_result['cumulative_return'].iloc[-1]
+    possible_maximum_drawdown = backtest_result['possible_maximum_drawdown'].min()
+    print(alpha_name, 'final return', round(final_return, 2), 'possible_maximum_drawdown', round(possible_maximum_drawdown, 2))
 
 start_date = datetime.date(2022, 5, 2)
 end_date = datetime.date(2023, 5, 1)
@@ -41,7 +43,10 @@ df_date = list(dict_df_klines.values())[0]['date']
 df_close = pd.concat(
     [df_klines['close'].astype('float').rename(f'{symbol}_close') for symbol, df_klines in dict_df_klines.items()],
     axis=1)
+
 for alpha_name, alpha in dict_alphas.items():
     df_rank = alpha(dict_df_klines)
-    final_return = backtest.backtest_coin_strategy(df_rank, df_date, df_close, symbols)['cumulative_return'].iloc[-1]
-    print(alpha_name, 'final return', round(final_return, 2))
+    backtest_result = backtest.backtest_coin_strategy(df_rank, df_date, df_close, symbols)
+    final_return = backtest_result['cumulative_return'].iloc[-1]
+    possible_maximum_drawdown = backtest_result['possible_maximum_drawdown'].min()
+    print(alpha_name, 'final return', round(final_return, 2), 'possible_maximum_drawdown', round(possible_maximum_drawdown, 2))

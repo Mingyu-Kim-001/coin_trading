@@ -51,6 +51,7 @@ class market_neutral_trading_backtest_binance:
         df_agg['return_net'] = (1 - df_agg['fee']) * (1 + df_agg['return']) - 1
         df_agg['cumulative_fee'] = df_agg['fee'].cumsum()
         df_agg['cumulative_return'] = (1 + df_agg['return_net']).cumprod()
+        df_agg['possible_maximum_drawdown'] = self.get_possible_maximum_drawdown(df_agg['cumulative_return'])
         return df_agg
 
     def standardize_rank(self, df_rank:pd.DataFrame):
@@ -61,6 +62,11 @@ class market_neutral_trading_backtest_binance:
               df_rank_not_nan_cnt // 2 + 1) * df_rank_odd
         df_standardized_weight = df_rank.sub(df_rank_mean, axis=0).div(df_rank_normalizer, axis=0).fillna(0)
         return df_standardized_weight
+
+    def get_possible_maximum_drawdown(self, df_cumulative_return):
+        df_cumulative_max = df_cumulative_return.cummax()
+        df_drawdown = df_cumulative_return / df_cumulative_max - 1
+        return df_drawdown
 
 
 
