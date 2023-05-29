@@ -7,7 +7,7 @@ pd.set_option('display.max_columns', 500)
 pd.set_option('display.width', 1000)
 backtest = market_neutral_trading_backtest_binance()
 alpha_collection = Alphas()
-alpha_org_names = [alpha_name for alpha_name in alpha_collection.__dir__() if not alpha_name.startswith('__')]
+alpha_org_names = [alpha_name for alpha_name in alpha_collection.__dir__() if not alpha_name.startswith('_')]
 dict_alphas = {}
 for alpha_name in alpha_org_names:
     if 'nday' in alpha_name:
@@ -15,6 +15,10 @@ for alpha_name in alpha_org_names:
             dict_alphas[alpha_name + f'_{n}'] = (lambda name, n: lambda x: getattr(alpha_collection, name)(x, n))(alpha_name, n)
     else:
         dict_alphas[alpha_name] = getattr(alpha_collection, alpha_name)
+# for alpha_name in alpha_org_names:
+#     dict_alphas[alpha_name] = getattr(alpha_collection, alpha_name)
+
+
 dict_df_klines = {}
 start_date = datetime.date(2017, 8, 17)
 end_date = datetime.date(2022, 5, 1)
