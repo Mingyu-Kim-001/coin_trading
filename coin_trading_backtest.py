@@ -43,7 +43,7 @@ class market_neutral_trading_backtest_binance:
         return df_extended
 
     def backtest_coin_strategy(self, df_rank, df_date, df_close, symbols, stop_loss=-0.05):
-        df_weight = self.standardize_rank(df_rank)
+        df_weight = self.neutralize_weight(df_rank)
         df_agg = pd.concat([df_date, df_close, df_weight], axis=1)
         df_agg['return'] = sum([df_agg[f'{symbol}_close'].pct_change().fillna(0).mul(df_agg[f'{symbol}_weight'], axis=0).clip(lower=stop_loss) for symbol in symbols])
         df_agg['trade_size'] = df_agg[[f'{symbol}_weight' for symbol in symbols]].diff().abs().sum(1)
@@ -54,14 +54,12 @@ class market_neutral_trading_backtest_binance:
         df_agg['possible_maximum_drawdown'] = self.get_possible_maximum_drawdown(df_agg['cumulative_return'])
         return df_agg
 
-    def standardize_rank(self, df_rank:pd.DataFrame):
-        df_rank_mean = df_rank.mean(1)
-        df_rank_not_nan_cnt = df_rank.notna().sum(1)
-        df_rank_odd = df_rank_not_nan_cnt % 2
-        df_rank_normalizer = (df_rank_not_nan_cnt // 2) ** 2 * (1 - df_rank_odd) + (df_rank_not_nan_cnt // 2) * (
-              df_rank_not_nan_cnt // 2 + 1) * df_rank_odd
-        df_standardized_weight = df_rank.sub(df_rank_mean, axis=0).div(df_rank_normalizer, axis=0).fillna(0)
-        return df_standardized_weight
+    def neutralize_weight(self, df_weight:pd.DataFrame):
+        df_weight_mean = df_weight.mean(1)
+        df_weight_neutralized = df_weight.sub(df_weight_mean, axis=0)
+        df_weight_normalizer = df_weight_neutralized.abs().sum(1)
+        df_weight_normalized = df_weight_neutralized.div(df_weight_normalizer, axis=0)
+        return df_weight_normalized
 
     def get_possible_maximum_drawdown(self, df_cumulative_return):
         df_cumulative_max = df_cumulative_return.cummax()
