@@ -11,7 +11,7 @@ alpha_org_names = [alpha_name for alpha_name in alpha_collection.__dir__() if no
 dict_alphas = {}
 for alpha_name in alpha_org_names:
     if 'nday' in alpha_name:
-        for n in list(range(1, 10)) + list(range(10, 100, 10)):
+        for n in list(range(1, 5)) + [10, 20, 50, 100, 200]:
             dict_alphas[alpha_name + f'_{n}'] = (lambda name, n: lambda x: getattr(alpha_collection, name)(x, n))(alpha_name, n)
     else:
         dict_alphas[alpha_name] = getattr(alpha_collection, alpha_name)
@@ -32,7 +32,7 @@ df_close = pd.concat(
     axis=1)
 for alpha_name, alpha in dict_alphas.items():
     df_rank = alpha(dict_df_klines)
-    backtest_result = backtest.backtest_coin_strategy(df_rank, df_date, df_close, symbols)
+    backtest_result = backtest.backtest_coin_strategy(df_rank, df_date, df_close, symbols, stop_loss=-0.05)
     final_return = backtest_result['cumulative_return'].iloc[-1]
     possible_maximum_drawdown = backtest_result['possible_maximum_drawdown'].min()
     print(alpha_name, 'final return', round(final_return, 2), 'possible_maximum_drawdown', round(possible_maximum_drawdown, 2))
@@ -50,7 +50,7 @@ df_close = pd.concat(
 
 for alpha_name, alpha in dict_alphas.items():
     df_rank = alpha(dict_df_klines)
-    backtest_result = backtest.backtest_coin_strategy(df_rank, df_date, df_close, symbols)
+    backtest_result = backtest.backtest_coin_strategy(df_rank, df_date, df_close, symbols, stop_loss=-0.05)
     final_return = backtest_result['cumulative_return'].iloc[-1]
     possible_maximum_drawdown = backtest_result['possible_maximum_drawdown'].min()
     print(alpha_name, 'final return', round(final_return, 2), 'possible_maximum_drawdown', round(possible_maximum_drawdown, 2))
