@@ -60,7 +60,7 @@ df_low = pd.concat(
 
 for alpha_name, alpha in dict_alphas.items():
     df_weight = alpha(dict_df_klines)
-    backtest_result = backtest.backtest_coin_strategy(df_weight, df_date, df_close, df_low, symbols, stop_loss=-0.05)
+    backtest_result = backtest.backtest_coin_strategy(df_weight, df_date, df_close, df_low, symbols)
     final_return = backtest_result['cumulative_return'].iloc[-1]
     possible_maximum_drawdown = backtest_result['possible_maximum_drawdown'].min()
     print(alpha_name, 'final return', round(final_return, 2), 'possible_maximum_drawdown', round(possible_maximum_drawdown, 2))
