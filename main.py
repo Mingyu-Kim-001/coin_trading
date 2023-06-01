@@ -21,45 +21,39 @@ for alpha_name in alpha_org_names:
 
 dict_df_klines = {}
 start_date = datetime.date(2017, 8, 17)
-end_date = datetime.date(2022, 5, 1)
-print(f'past {start_date} ~ {end_date}')
+end_date = datetime.date(2023, 5, 1)
+print(f'spot {start_date} ~ {end_date}')
 symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT']
 # symbols = ['BTCUSDT', 'ETHUSDT']
 
 for symbol in symbols:
     dict_df_klines[symbol] = backtest.get_binance_klines_data_1d(symbol, start_date, end_date)
 df_date = list(dict_df_klines.values())[0]['date']
-df_close = pd.concat(
-    [df_klines['close'].astype('float').rename(f'{symbol}_close') for symbol, df_klines in dict_df_klines.items()],
-    axis=1)
-df_low = pd.concat(
-    [df_klines['low'].astype('float').rename(f'{symbol}_low') for symbol, df_klines in dict_df_klines.items()],
-    axis=1)
-
+past_recent_split_date = datetime.date(2022, 5, 1)
 for alpha_name, alpha in dict_alphas.items():
     df_weight = alpha(dict_df_klines)
-    backtest_result = backtest.backtest_coin_strategy(df_weight, dict_df_klines, df_date, symbols)
-    final_return = backtest_result['cumulative_return'].iloc[-1]
-    possible_maximum_drawdown = backtest_result['possible_maximum_drawdown'].min()
-    print(alpha_name, 'final return', round(final_return, 2), 'possible_maximum_drawdown', round(possible_maximum_drawdown, 2))
+    df_weight_past = df_weight.copy()
+    df_weight_recent = df_weight.copy()
+    df_weight_past.loc[df_date > pd.to_datetime(past_recent_split_date), :] = 0
+    df_weight_recent.loc[df_date <= pd.to_datetime(past_recent_split_date), :] = 0
+    final_return, possible_maximum_drawdown = [] , []
+    for df_weight, is_past in zip([df_weight_past, df_weight_recent], [True, False]):
+        backtest_result = backtest.backtest_coin_strategy(df_weight, dict_df_klines, df_date, symbols)
+        final_return.append(round(backtest_result['cumulative_return'].iloc[-1], 2))
+        possible_maximum_drawdown.append(round(backtest_result['possible_maximum_drawdown'].min(), 2))
+    print(alpha_name, 'final return', final_return, 'possible_maximum_drawdown', possible_maximum_drawdown, [f'{start_date} ~ {past_recent_split_date}', f'{past_recent_split_date} ~ {end_date}'])
 
-start_date = datetime.date(2022, 5, 2)
-end_date = datetime.date(2023, 5, 1)
-is_future = True
-print(f'recent {start_date} ~ {end_date}')
+
+print('-------------------')
+print(f'future {start_date} ~ {end_date}')
 for symbol in symbols:
-    dict_df_klines[symbol] = backtest.get_binance_klines_data_1d(symbol, start_date, end_date, is_future)
-df_date = list(dict_df_klines.values())[0]['date']
-df_close = pd.concat(
-    [df_klines['close'].astype('float').rename(f'{symbol}_close') for symbol, df_klines in dict_df_klines.items()],
-    axis=1)
-df_low = pd.concat(
-    [df_klines['low'].astype('float').rename(f'{symbol}_low') for symbol, df_klines in dict_df_klines.items()],
-    axis=1)
-
+    dict_df_klines[symbol] = backtest.get_binance_klines_data_1d(symbol, start_date, end_date, is_future=True)
 for alpha_name, alpha in dict_alphas.items():
     df_weight = alpha(dict_df_klines)
-    backtest_result = backtest.backtest_coin_strategy(df_weight, dict_df_klines, df_date, symbols)
-    final_return = backtest_result['cumulative_return'].iloc[-1]
-    possible_maximum_drawdown = backtest_result['possible_maximum_drawdown'].min()
-    print(alpha_name, 'final return', round(final_return, 2), 'possible_maximum_drawdown', round(possible_maximum_drawdown, 2))
+    df_weight_recent = df_weight.copy()
+    df_weight_recent.loc[df_date <= pd.to_datetime(past_recent_split_date), :] = 0
+    backtest_result = backtest.backtest_coin_strategy(df_weight_recent, dict_df_klines, df_date, symbols)
+    final_return = round(backtest_result['cumulative_return'].iloc[-1], 2)
+    possible_maximum_drawdown = round(backtest_result['possible_maximum_drawdown'].min(), 2)
+    print(alpha_name, 'final return', final_return, 'possible_maximum_drawdown', possible_maximum_drawdown, f'{past_recent_split_date} ~ {end_date}')
+
