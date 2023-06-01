@@ -59,3 +59,12 @@ class Alphas:
             [(df_klines['volume'].astype('float') / df_klines['volume'].astype('float').rolling(n).mean()).shift(1).rename(f'{symbol}_weight') for symbol, df_klines
              in dict_df_klines.items()], axis=1)
         return df_agg
+
+    def correlation_open_close_nday(self, dict_df_klines:dict, n=10):
+        '''
+        weight = correlation(open, close, n)
+        '''
+        df_agg = pd.concat(
+            [df_klines['open'].shift(1).rolling(n).corr(df_klines['close'].shift(1)).rename(f'{symbol}_weight') for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        return df_agg
