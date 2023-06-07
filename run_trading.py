@@ -12,12 +12,12 @@ class Trading():
     def __init__(self):
         self.BINANCE_API_KEY = os.getenv('BINANCE_API_KEY')
         self.BINANCE_SECRET_KEY = os.getenv('BINANCE_SECRET_API_KEY')
+        self.client = Client(self.BINANCE_API_KEY, self.BINANCE_SECRET_KEY)
 
     def get_binance_klines_data(self, timestamp_start, timestamp_end, symbol, interval='1m'):
-        client = Client(self.BINANCE_API_KEY, self.BINANCE_SECRET_KEY)
         timestamp_start_str = str(int(timestamp_start.timestamp()))
         timestamp_end_str = str(int(timestamp_end.timestamp()))
-        klines = client.futures_historical_klines(symbol, interval, timestamp_start_str, timestamp_end_str)
+        klines = self.client.futures_historical_klines(symbol, interval, timestamp_start_str, timestamp_end_str)
         df = pd.DataFrame(klines,
                           columns=['open_time', 'open', 'high', 'low', 'close', 'volume',
                                    'close_time',
@@ -36,17 +36,20 @@ class Trading():
 
     def get_current_biannce_futures_balance(self):
         #get my current binance futures amount
-        client = Client(self.BINANCE_API_KEY, self.BINANCE_SECRET_KEY)
-        futures_account = client.futures_account()
+        futures_account = self.client.futures_account()
         df_futures_account = pd.DataFrame(futures_account['assets'])
         for column_name in df_futures_account.columns:
             if column_name not in ['asset', 'marginAvailable', 'updateTime']:
                 df_futures_account[column_name] = df_futures_account[column_name].astype('float')
 
     def get_current_future_price(self, symbol):
-        client = Client(self.BINANCE_API_KEY, self.BINANCE_SECRET_KEY)
-        futures_ticker = client.futures_ticker(symbol=symbol)
+        futures_ticker = self.client.futures_ticker(symbol=symbol)
         return float(futures_ticker['lastPrice'])
+
+    def get_futures_order_book(self, symbol):
+        client = Client(self.BINANCE_API_KEY, self.BINANCE_SECRET_KEY)
+        order_book = client.futures_order_book(symbol=symbol)
+        return order_book
 
 
 
@@ -56,6 +59,7 @@ if __name__ == '__main__':
     trading = Trading()
     trading.get_current_biannce_futures_balance()
     trading.get_current_future_price('OPUSDT')
+    trading.get_futures_order_book('OPUSDT')
     n_days = 4
     alphas = alpha_collection.Alphas()
     now = datetime.now()
