@@ -2,14 +2,11 @@ import os
 
 import numpy as np
 import requests
-from binance.client import Client
-
 from utils import *
 
 
 class market_neutral_trading_backtest_binance:
     def __init__(self):
-        self.client = Client(self.api_key, self.api_secret)
         self.initial_budget = 10000
         self.trade_ratio = 0.1
         self.fee_rate = 0.00016  # 0.016%
@@ -24,8 +21,7 @@ class market_neutral_trading_backtest_binance:
             df_extended[column] = df_extended[column].astype(float)
         return df_extended
 
-    def backtest_coin_strategy(self, df_weight, dict_df_klines, df_date, symbols, stop_loss=-1):
-        df_neutralized_weight = neutralize_weight(df_weight)
+    def backtest_coin_strategy(self, df_neutralized_weight, dict_df_klines, df_date, symbols, stop_loss=-1):
         dict_df_return, dict_df_trade_size = {}, {}
         df_agg = pd.DataFrame(df_date, columns=['date'])
         for symbol in symbols:

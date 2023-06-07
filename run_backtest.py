@@ -6,17 +6,15 @@ from alpha_collection import Alphas
 pd.set_option('display.max_columns', 500)
 pd.set_option('display.width', 1000)
 backtest = market_neutral_trading_backtest_binance()
-alpha_collection = Alphas()
-alpha_org_names = [alpha_name for alpha_name in alpha_collection.__dir__() if not alpha_name.startswith('_')]
+alpahs = Alphas()
+alpha_org_names = [alpha_name for alpha_name in alpahs.__dir__() if not alpha_name.startswith('_')]
 dict_alphas = {}
 for alpha_name in alpha_org_names:
     if 'nday' in alpha_name:
         for n in list(range(1, 5)) + [10, 20, 50, 100, 200]:
-            dict_alphas[alpha_name + f'_{n}'] = (lambda name, n: lambda x: getattr(alpha_collection, name)(x, n))(alpha_name, n)
+            dict_alphas[alpha_name + f'_{n}'] = (lambda name, n: lambda x: getattr(alpahs, name)(x, n))(alpha_name, n)
     else:
-        dict_alphas[alpha_name] = getattr(alpha_collection, alpha_name)
-# for alpha_name in alpha_org_names:
-#     dict_alphas[alpha_name] = getattr(alpha_collection, alpha_name)
+        dict_alphas[alpha_name] = getattr(alpahs, alpha_name)
 
 
 dict_df_klines = {}
