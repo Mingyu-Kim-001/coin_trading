@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 from binance.client import Client
+import asyncio
+from binance import AsyncClient, BinanceSocketManager
 
 import alpha_collection
 from utils import *
@@ -34,7 +36,7 @@ class Trading():
         df_next_position.columns = [symbol_weight.split('_')[0] for symbol_weight in df_next_position.columns] #remove _weight
         return df_next_position
 
-    def get_current_biannce_futures_balance(self):
+    def get_current_bianance_futures_balance(self):
         #get my current binance futures amount
         futures_account = self.client.futures_account()
         df_futures_account = pd.DataFrame(futures_account['assets'])
