@@ -15,6 +15,7 @@ class Trading():
         self.BINANCE_API_KEY = os.getenv('BINANCE_API_KEY')
         self.BINANCE_SECRET_KEY = os.getenv('BINANCE_SECRET_API_KEY')
         self.client = Client(self.BINANCE_API_KEY, self.BINANCE_SECRET_KEY)
+        self.df_future_trading_rules = None
 
     def get_binance_klines_data(self, timestamp_start, timestamp_end, symbol, interval='1m'):
         timestamp_start_str = str(int(timestamp_start.timestamp()))
@@ -36,7 +37,7 @@ class Trading():
         df_next_position.columns = [symbol_weight.split('_')[0] for symbol_weight in df_next_position.columns] #remove _weight
         return df_next_position
 
-    def get_current_bianance_futures_balance(self):
+    def get_current_binance_futures_balance(self):
         #get my current binance futures amount
         futures_account = self.client.futures_account()
         df_futures_account = pd.DataFrame(futures_account['assets'])
@@ -48,20 +49,32 @@ class Trading():
         futures_ticker = self.client.futures_ticker(symbol=symbol)
         return float(futures_ticker['lastPrice'])
 
+    def create_order(self, symbol, price, quantity):
+        order = self.client.futures_create_order(
+            symbol=symbol,
+            type="LIMIT",
+            side="BUY",
+            timeInForce='GTC',
+            price=price,
+            quantity=quantity
+        )
+
+    def get_futures_trading_rules(self):
+        with open('./futures_trading_rules/futures_trading_rules.csv', 'r') as f:
+            self.df_future_trading_rules = pd.read_csv(f)
+        return self.df_future_trading_rules
+
     def get_futures_order_book(self, symbol):
         client = Client(self.BINANCE_API_KEY, self.BINANCE_SECRET_KEY)
         order_book = client.futures_order_book(symbol=symbol)
         return order_book
 
 
-
 if __name__ == '__main__':
     pd.set_option('display.max_columns', 500)
     pd.set_option('display.width', 1000)
     trading = Trading()
-    trading.get_current_biannce_futures_balance()
-    trading.get_current_future_price('OPUSDT')
-    trading.get_futures_order_book('OPUSDT')
+    trading.get_futures_trading_rules()
     n_days = 4
     alphas = alpha_collection.Alphas()
     now = datetime.now()
@@ -74,5 +87,6 @@ if __name__ == '__main__':
         dict_df_klines[symbol] = df_klines
     alpha = lambda x: alphas.close_momentum_nday(x, 3)
     next_position = trading.get_next_position(dict_df_klines, alpha, quote_total_size=30)
+    print(next_position)
 
 
