@@ -1,5 +1,8 @@
-import pandas as pd
 import duckdb
+import math
+import numpy as np
+import pandas as pd
+
 
 def query_on_pandas_df(str_query: str, **kwargs) -> pd.DataFrame:
     '''
@@ -13,17 +16,37 @@ def query_on_pandas_df(str_query: str, **kwargs) -> pd.DataFrame:
         locals()[key] = item
     return duckdb.sql(str_query).df()
 
+
 def neutralize_weight(df_weight: pd.DataFrame, max_weight=1):
     df_weight_mean = df_weight.mean(1)
     df_weight_centered = df_weight.sub(df_weight_mean, axis=0)
     df_weight_normalizer = df_weight_centered.abs().sum(1)
     df_weight_neutralized = df_weight_centered.div(df_weight_normalizer, axis=0).fillna(0)
+
     def weight_max_capping(row, max_weight):
         pass
+
     # df_weight_max_capping = df_weight_neutralized.clip(lambda x: )
     return df_weight_neutralized
+
 
 def get_possible_maximum_drawdown(df_cumulative_return):
     df_cumulative_max = df_cumulative_return.cummax()
     df_drawdown = df_cumulative_return / df_cumulative_max - 1
     return df_drawdown
+
+
+def round_toward_zero(x, tick_size):
+    return math.floor(x / tick_size) * tick_size if x > 0 else math.ceil(x / tick_size) * tick_size
+
+
+def trim_quantity(df_quantity_and_price):
+    with open('./futures_trading_rules/futures_trading_rules.csv', 'r') as f:
+        df_future_trading_rules = pd.read_csv(f).set_index('symbol')
+    df_quantity_and_price = df_quantity_and_price.T.rename(columns={1: 'quantity'}).join(
+        df_future_trading_rules).assign(quantity_trimmed=lambda x: round(x.quantity / x.tick_size) * x.tick_size)
+    df_quantity_and_price.quantity_trimmed = np.where(
+        (np.abs(df_quantity_and_price.quantity / df_quantity_and_price.price) < df_quantity_and_price.min_qty) | (
+                np.abs(df_quantity_and_price.quantity) < df_quantity_and_price.min_notinoal), 0,
+        df_quantity_and_price.quantity_trimmed)
+    return df_quantity_and_price
