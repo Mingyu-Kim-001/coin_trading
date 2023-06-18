@@ -2,6 +2,7 @@ import duckdb
 import math
 import numpy as np
 import pandas as pd
+from decimal import Decimal, ROUND_HALF_UP
 
 
 def query_on_pandas_df(str_query: str, **kwargs) -> pd.DataFrame:
@@ -40,13 +41,13 @@ def round_toward_zero(x, tick_size):
     return math.floor(x / tick_size) * tick_size if x > 0 else math.ceil(x / tick_size) * tick_size
 
 
-def trim_quantity(df_quantity_and_price):
+def trim_quantity(df_quantity_and_price, usdt_column_name, price_column_name):
     with open('./futures_trading_rules/futures_trading_rules.csv', 'r') as f:
         df_future_trading_rules = pd.read_csv(f).set_index('symbol')
-    df_quantity_and_price = df_quantity_and_price.T.rename(columns={1: 'quantity'}).join(
-        df_future_trading_rules).assign(quantity_trimmed=lambda x: round(x.quantity / x.tick_size) * x.tick_size)
+    df_quantity_and_price = df_quantity_and_price.join(df_future_trading_rules).applymap(lambda x:Decimal(str(x)))
+    df_quantity_and_price['quantity_trimmed'] = round((df_quantity_and_price[usdt_column_name] / df_quantity_and_price[price_column_name] / df_quantity_and_price.min_qty).astype(float)).apply(lambda x:Decimal(str(x))) * df_quantity_and_price.min_qty
     df_quantity_and_price.quantity_trimmed = np.where(
-        (np.abs(df_quantity_and_price.quantity / df_quantity_and_price.price) < df_quantity_and_price.min_qty) | (
-                np.abs(df_quantity_and_price.quantity) < df_quantity_and_price.min_notinoal), 0,
+        (np.abs(df_quantity_and_price.quantity_trimmed * df_quantity_and_price[price_column_name]) < df_quantity_and_price.min_notinoal), Decimal(0),
         df_quantity_and_price.quantity_trimmed)
+    df_quantity_and_price[f"{usdt_column_name}_trimmed"] = df_quantity_and_price.quantity_trimmed * df_quantity_and_price.price
     return df_quantity_and_price

@@ -8,6 +8,7 @@ from binance import AsyncClient, BinanceSocketManager, ThreadedWebsocketManager
 
 import alpha_collection
 from utils import *
+from decimal import Decimal
 
 
 api_key = os.getenv('BINANCE_API_KEY')
@@ -28,37 +29,29 @@ def get_binance_klines_data(timestamp_start, timestamp_end, symbol, interval='1m
     df['close_time'] = df['close_time'].apply(lambda x: datetime.fromtimestamp(x / 1000))
     return df
 
-# def get_next_position(self, dict_df_klines, alpha, quote_total_size):
-#     df_weight = alpha(dict_df_klines)
-#     df_next_position = df_weight.iloc[-1:, :] * quote_total_size
-#     df_next_position.columns = [symbol_weight.split('_')[0] for symbol_weight in df_next_position.columns] #remove _weight
-#     return df_next_position
 
-# def simple_momentum_3(self):
+def get_current_futures_position(symbols):
+    account_info = client.futures_account()
+    positions = account_info['positions']
+    df_futures_position = pd.DataFrame([position for position in positions if position['symbol'] in symbols]).set_index("symbol")[['entryPrice', 'positionAmt']].astype(float)
+    return df_futures_position
 
+def create_order(symbol, price, quantity, leverage=1, is_dryrun=False):
+    side = "BUY" if quantity > 0 else "SELL"
+    quantity = str(abs(Decimal(str(quantity))))
+    if is_dryrun:
+        print(f'{side} {quantity} {symbol} at price {price}')
+    else:
+        order = client.futures_create_order(
+            symbol=symbol,
+            type="LIMIT",
+            side=side,
+            timeInForce='GTC',
+            price=price,
+            quantity=quantity,
+            leverage=leverage
+        )
 
-def get_current_binance_futures_balance():
-    #get my current binance futures amount
-    futures_account = client.futures_account()
-    df_futures_account = pd.DataFrame(futures_account['assets'])
-    for column_name in df_futures_account.columns:
-        if column_name not in ['asset', 'marginAvailable', 'updateTime']:
-            df_futures_account[column_name] = df_futures_account[column_name].astype('float')
-    return df_futures_account
-
-def get_current_future_price(symbol):
-    futures_ticker = client.futures_ticker(symbol=symbol)
-    return float(futures_ticker['lastPrice'])
-
-def create_order(symbol, price, quantity):
-    order = client.futures_create_order(
-        symbol=symbol,
-        type="LIMIT",
-        side="BUY",
-        timeInForce='FOK',
-        price=price,
-        quantity=quantity
-    )
 
 def get_futures_trading_rules():
     with open('./futures_trading_rules/futures_trading_rules.csv', 'r') as f:
@@ -69,27 +62,41 @@ def get_futures_order_book(symbol):
     order_book = client.futures_order_book(symbol=symbol)
     return order_book
 
-# def order_real_time(self):
 
+def order_with_quantity(df, quantity_column_name, price_column_name, is_dryrun=False):
+    df.apply(lambda x: create_order(symbol=x.name, price=x[price_column_name], quantity=x[quantity_column_name], is_dryrun=is_dryrun), axis=1)
 
+def cancel_all_orders(symbols):
+    for symbol in symbols:
+        open_orders = client.futures_get_open_orders(symbol=symbol)
+        for order in open_orders:
+            order_id = order['orderId']
+            cancel_response = client.futures_cancel_order(symbol=symbol, orderId=order_id)
+            if cancel_response['status'] == 'CANCELED':
+                print(f"Order {order_id} canceled successfully.")
+            else:
+                print(f"Failed to cancel order {order_id}. Error: {cancel_response['msg']}")
 
 
 if __name__ == '__main__':
     pd.set_option('display.max_columns', 500)
     pd.set_option('display.width', 1000)
-
-    total_quantity = 300
     symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT']
     close_72hours = {}
     dict_df_klines = {}
-    df_current_futures_balance = get_current_binance_futures_balance()
+    cancel_all_orders(symbols)
+    df_current_futures_position = get_current_futures_position(symbols)
+    total_quantity = df_current_futures_position['positionAmt'].abs() * df_current_futures_position
     close_72hours = {symbol: float(client.futures_historical_klines(symbol, '1h', '72 hours ago UTC')[0][4]) for symbol in symbols}
     current_price = {symbol: float(client.futures_ticker(symbol=symbol)['lastPrice']) for symbol in symbols}
     df_price = pd.concat([pd.DataFrame(close_72hours, index=[0]), pd.DataFrame(current_price, index=[1])], axis=0)
-    df_weight = neutralize_weight(df_price.pct_change().loc[[1]])
+    df_weight = neutralize_weight(df_price.pct_change().loc[[1]]).T.rename(columns={1: 'next_position_usdt'})
+    df_current_price_and_amount = pd.DataFrame.from_dict(current_price, orient='index', columns=['price']).join(df_current_futures_position)
+    total_quantity = np.max([(df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum(), 300])
     df_quantity = (df_weight * total_quantity)
-    df_quantity_and_price = pd.concat([df_quantity, pd.DataFrame(current_price, index=['price'])], axis=0)
-    df_quantity_and_price_trimmed = trim_quantity(df_quantity_and_price)
-    print(df_quantity_and_price_trimmed)
-
-
+    df_quantity_and_price = df_quantity.join(df_current_price_and_amount)\
+        .assign(current_position_in_usdt=lambda x: x.positionAmt * x.price)\
+        .assign(changing_position_in_usdt=lambda x: x.next_position_usdt - x.current_position_in_usdt)
+    df_quantity_and_price_trimmed = trim_quantity(df_quantity_and_price, usdt_column_name='changing_position_in_usdt', price_column_name='price')
+    order_with_quantity(df_quantity_and_price_trimmed, quantity_column_name='quantity_trimmed', price_column_name='price', is_dryrun=True)
+    print()
