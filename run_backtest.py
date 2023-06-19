@@ -13,6 +13,8 @@ for alpha_name in alpha_org_names:
     if 'nday' in alpha_name:
         for n in list(range(1, 5)) + [10, 20, 50, 100, 200]:
             dict_alphas[alpha_name + f'_{n}'] = (lambda name, n: lambda x: getattr(alpahs, name)(x, n))(alpha_name, n)
+            if alpha_name == 'close_momentum_nday':
+                dict_alphas[alpha_name + f'_{n}_max_weight_0.15'] = (lambda name, n: lambda x: getattr(alpahs, name)(x, n, max_weight=0.15))(alpha_name, n)
     else:
         dict_alphas[alpha_name] = getattr(alpahs, alpha_name)
 
@@ -43,7 +45,7 @@ for alpha_name, alpha in dict_alphas.items():
 
 
 print('-------------------')
-print(f'future {start_date} ~ {end_date}')
+print(f'future {past_recent_split_date} ~ {end_date}')
 for symbol in symbols:
     dict_df_klines[symbol] = backtest.get_binance_klines_data_1d(symbol, start_date, end_date, is_future=True)
 for alpha_name, alpha in dict_alphas.items():
