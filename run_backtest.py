@@ -21,7 +21,8 @@ for alpha_name in alpha_org_names:
 
 dict_df_klines = {}
 start_date = datetime.date(2017, 8, 17)
-end_date = datetime.date(2023, 5, 1)
+end_date = datetime.date(2023, 6, 18)
+past_recent_split_date = datetime.date(2023, 5, 18)
 print(f'spot {start_date} ~ {end_date}')
 symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT']
 # symbols = ['BTCUSDT', 'ETHUSDT']
@@ -29,7 +30,6 @@ symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 
 for symbol in symbols:
     dict_df_klines[symbol] = backtest.get_binance_klines_data_1d(symbol, start_date, end_date)
 df_date = list(dict_df_klines.values())[0]['date']
-past_recent_split_date = datetime.date(2022, 5, 1)
 for alpha_name, alpha in dict_alphas.items():
     df_weight = alpha(dict_df_klines)
     df_weight_past = df_weight.copy()
