@@ -44,12 +44,13 @@ def create_order(symbol, price, quantity, leverage=1, is_dryrun=False):
     else:
         order = client.futures_create_order(
             symbol=symbol,
-            type="LIMIT",
             side=side,
-            timeInForce='GTC',
             price=price,
             quantity=quantity,
-            leverage=leverage
+            leverage=leverage,
+            timeInForce='GTC',
+            type="LIMIT",
+            reduceOnly=False
         )
 
 
