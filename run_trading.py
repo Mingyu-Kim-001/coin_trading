@@ -36,12 +36,10 @@ def get_current_futures_position(symbols):
     df_futures_position = pd.DataFrame([position for position in positions if position['symbol'] in symbols]).set_index("symbol")[['entryPrice', 'positionAmt']].astype(float)
     return df_futures_position
 
-def create_order(symbol, price, quantity, leverage=1, is_dryrun=False):
+def create_order(symbol, price, quantity, leverage, is_dryrun=False):
     side = "BUY" if quantity > 0 else "SELL"
     quantity = str(abs(Decimal(str(quantity))))
-    if is_dryrun:
-        print(f'{side} {quantity} {symbol} at price {price}')
-    else:
+    if not is_dryrun and quantity != '0':
         order = client.futures_create_order(
             symbol=symbol,
             side=side,
@@ -52,7 +50,7 @@ def create_order(symbol, price, quantity, leverage=1, is_dryrun=False):
             type="LIMIT",
             reduceOnly=False
         )
-
+    print(f'{side} {quantity} {symbol} at price {price}, leverage={leverage}')
 
 def get_futures_trading_rules():
     with open('./futures_trading_rules/futures_trading_rules.csv', 'r') as f:
@@ -64,8 +62,8 @@ def get_futures_order_book(symbol):
     return order_book
 
 
-def order_with_quantity(df, quantity_column_name, price_column_name, is_dryrun=False):
-    df.apply(lambda x: create_order(symbol=x.name, price=x[price_column_name], quantity=x[quantity_column_name], is_dryrun=is_dryrun), axis=1)
+def order_with_quantity(df, quantity_column_name, price_column_name, is_dryrun=False, leverage=1):
+    df.apply(lambda x: create_order(symbol=x.name, price=x[price_column_name], quantity=x[quantity_column_name], leverage=leverage, is_dryrun=is_dryrun), axis=1)
 
 def cancel_all_orders(symbols):
     for symbol in symbols:
@@ -80,17 +78,18 @@ def cancel_all_orders(symbols):
 
 
 if __name__ == '__main__':
+    is_dryrun = True
     pd.set_option('display.max_columns', 500)
     pd.set_option('display.width', 1000)
     symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT']
-    close_72hours = {}
+    close_48hours = {}
     dict_df_klines = {}
-    cancel_all_orders(symbols)
+    if not is_dryrun:
+        cancel_all_orders(symbols)
     df_current_futures_position = get_current_futures_position(symbols)
-    total_quantity = df_current_futures_position['positionAmt'].abs() * df_current_futures_position
-    close_72hours = {symbol: float(client.futures_historical_klines(symbol, '1h', '72 hours ago UTC')[0][4]) for symbol in symbols}
+    close_48hours = {symbol: float(client.futures_historical_klines(symbol, '1h', '48 hours ago UTC')[0][4]) for symbol in symbols}
     current_price = {symbol: float(client.futures_ticker(symbol=symbol)['lastPrice']) for symbol in symbols}
-    df_price = pd.concat([pd.DataFrame(close_72hours, index=[0]), pd.DataFrame(current_price, index=[1])], axis=0)
+    df_price = pd.concat([pd.DataFrame(close_48hours, index=[0]), pd.DataFrame(current_price, index=[1])], axis=0)
     df_weight = neutralize_weight(df_price.pct_change().loc[[1]]).T.rename(columns={1: 'next_position_usdt'})
     df_current_price_and_amount = pd.DataFrame.from_dict(current_price, orient='index', columns=['price']).join(df_current_futures_position)
     total_quantity = np.max([(df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum(), 300])
@@ -99,5 +98,5 @@ if __name__ == '__main__':
         .assign(current_position_in_usdt=lambda x: x.positionAmt * x.price)\
         .assign(changing_position_in_usdt=lambda x: x.next_position_usdt - x.current_position_in_usdt)
     df_quantity_and_price_trimmed = trim_quantity(df_quantity_and_price, usdt_column_name='changing_position_in_usdt', price_column_name='price')
-    order_with_quantity(df_quantity_and_price_trimmed, quantity_column_name='quantity_trimmed', price_column_name='price', is_dryrun=True)
+    order_with_quantity(df_quantity_and_price_trimmed, quantity_column_name='quantity_trimmed', price_column_name='price', leverage=1, is_dryrun=is_dryrun)
     print()
