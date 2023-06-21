@@ -50,7 +50,7 @@ class market_neutral_trading_backtest_binance:
                                   abs(df_neutralized_weight_symbol - df_neutralized_weight_symbol_lag)))
             )
 
-        df_agg['return'] = pd.DataFrame(dict_df_return).sum(axis=1) * leverage
+        df_agg['return'] = (pd.DataFrame(dict_df_return).sum(axis=1) * leverage).clip(-1, float("inf"))
         df_agg['trade_size'] = pd.DataFrame(dict_df_trade_size).sum(axis=1) * leverage
         df_agg['fee'] = df_agg['trade_size'].mul(self.fee_rate)
         df_agg['return_net'] = (1 - df_agg['fee']) * (1 + df_agg['return']) - 1
