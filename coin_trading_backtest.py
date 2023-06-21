@@ -28,7 +28,7 @@ class market_neutral_trading_backtest_binance:
         df_agg = pd.DataFrame(df_date, columns=['date'])
         for symbol in symbols:
             df_neutralized_weight_symbol = df_neutralized_weight[f'{symbol}_weight']
-            pct_change = dict_df_klines[symbol]['close'].pct_change().fillna(0)
+            pct_change = dict_df_klines[symbol]['close'].pct_change().fillna(0).replace([-np.inf, np.inf], 0)
             daily_maximum_drawdown = (dict_df_klines[symbol]['open'] - dict_df_klines[symbol]['low']) / dict_df_klines[symbol]['open'] - 1
             daily_maximum_gain = (dict_df_klines[symbol]['high'] - dict_df_klines[symbol]['open']) / dict_df_klines[symbol]['open'] - 1
             is_stop_loss = ((df_neutralized_weight_symbol < 0) & (daily_maximum_drawdown < stop_loss)) \
