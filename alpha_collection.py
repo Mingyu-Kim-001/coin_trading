@@ -26,12 +26,12 @@ class Alphas:
         df_neutralized_weight = neutralize_weight(df_rank)
         return df_neutralized_weight
 
-    def close_momentum_nday(self, dict_df_klines: dict, n=1, weight_max=None):
+    def close_momentum_nday(self, dict_df_klines: dict, n=1, weight_max=None, shift=1, rename_weight=True):
         '''
         weight = close price change compared to n days ago
         '''
         df_agg = pd.concat(
-            [df_klines['close'].astype('float').pct_change(n).shift(1).rename(f'{symbol}_weight') for symbol, df_klines
+            [df_klines['close'].astype('float').pct_change(n).shift(shift).rename(f'{symbol}{"_weight" if rename_weight else ""}') for symbol, df_klines
              in dict_df_klines.items()], axis=1)
         if weight_max is not None:
             df_agg = df_agg.clip(-weight_max, weight_max)
