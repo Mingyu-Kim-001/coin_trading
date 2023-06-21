@@ -87,10 +87,11 @@ if __name__ == '__main__':
     if not is_dryrun:
         cancel_all_orders(symbols)
     df_current_futures_position = get_current_futures_position(symbols)
-    close_48hours = {symbol: float(client.futures_historical_klines(symbol, '1h', '48 hours ago UTC')[0][4]) for symbol in symbols}
+    past_price = {symbol: float(client.futures_historical_klines(symbol, '1h', '48 hours ago UTC')[0][4]) for symbol in symbols}
     current_price = {symbol: float(client.futures_ticker(symbol=symbol)['lastPrice']) for symbol in symbols}
-    df_price = pd.concat([pd.DataFrame(close_48hours, index=[0]), pd.DataFrame(current_price, index=[1])], axis=0)
-    df_weight = neutralize_weight(df_price.pct_change().loc[[1]]).T.rename(columns={1: 'next_position_usdt'})
+    dict_df_close = {symbol: pd.DataFrame({'close': [past_price[symbol], current_price[symbol]]}, index=['past', 'current']) for symbol in symbols}
+    alphas = alpha_collection.Alphas()
+    df_weight = alphas.close_momentum_nday(dict_df_close, n=1, weight_max=0.05, shift=0, rename_weight=False).loc[['current']].T.rename(columns={'current':'next_position_usdt'}) # we have a pre-processed data, so n must be 1, shift must be 0
     df_current_price_and_amount = pd.DataFrame.from_dict(current_price, orient='index', columns=['price']).join(df_current_futures_position)
     total_quantity = np.max([(df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum(), 300])
     df_quantity = (df_weight * total_quantity)
