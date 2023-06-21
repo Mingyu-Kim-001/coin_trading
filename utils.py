@@ -18,8 +18,9 @@ def query_on_pandas_df(str_query: str, **kwargs) -> pd.DataFrame:
     return duckdb.sql(str_query).df()
 
 
-def neutralize_weight(df_weight: pd.DataFrame, max_weight=float("inf")) -> pd.DataFrame:
+def neutralize_weight(df_weight: pd.DataFrame, weight_multiplier_max=float("inf")) -> pd.DataFrame:
     df_weight_mean = df_weight.mean(1)
+    max_weight = 1 / df_weight.shape[1] * weight_multiplier_max
     df_weight_centered = df_weight.sub(df_weight_mean, axis=0)
     df_weight_normalizer = df_weight_centered.abs().sum(1)
     df_weight_neutralized = df_weight_centered.div(df_weight_normalizer, axis=0).fillna(0)
