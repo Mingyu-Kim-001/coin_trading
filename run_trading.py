@@ -38,7 +38,7 @@ def get_current_futures_position(symbols):
 
 def create_order(symbol, price, quantity, leverage, is_dryrun=False):
     side = "BUY" if quantity > 0 else "SELL"
-    quantity = str(abs(Decimal(str(quantity))))
+    quantity = str(abs(Decimal(str(quantity)) * Decimal(leverage)))
     if not is_dryrun and quantity != '0':
         order = client.futures_create_order(
             symbol=symbol,
@@ -63,7 +63,7 @@ def get_futures_order_book(symbol):
 
 
 def order_with_quantity(df, quantity_column_name, price_column_name, is_dryrun=False, leverage=1):
-    df.apply(lambda x: create_order(symbol=x.name, price=x[price_column_name], quantity=x[quantity_column_name], leverage=leverage, is_dryrun=is_dryrun), axis=1)
+    df.sort_values(by='changing_position_in_usdt', key=lambda x:x.abs()).apply(lambda x: create_order(symbol=x.name, price=x[price_column_name], quantity=x[quantity_column_name], leverage=leverage, is_dryrun=is_dryrun), axis=1)
 
 def cancel_all_orders(symbols):
     for symbol in symbols:
@@ -96,7 +96,8 @@ if __name__ == '__main__':
     df_quantity = (df_weight * total_quantity)
     df_quantity_and_price = df_quantity.join(df_current_price_and_amount)\
         .assign(current_position_in_usdt=lambda x: x.positionAmt * x.price)\
-        .assign(changing_position_in_usdt=lambda x: x.next_position_usdt - x.current_position_in_usdt)
-    df_quantity_and_price_trimmed = trim_quantity(df_quantity_and_price, usdt_column_name='changing_position_in_usdt', price_column_name='price')
+        .assign(changing_position_in_usdt=lambda x: x.next_position_usdt - x.current_position_in_usdt)\
+        .assign(margin_increase=lambda x: x.next_position_usdt.abs() - x.current_position_in_usdt.abs())
+    df_quantity_and_price_trimmed = trim_quantity(df_quantity_and_price, usdt_column_name='changing_position_in_usdt', price_column_name='price').sort_values('margin_increase')
     order_with_quantity(df_quantity_and_price_trimmed, quantity_column_name='quantity_trimmed', price_column_name='price', leverage=1, is_dryrun=is_dryrun)
     print()
