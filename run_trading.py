@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timedelta
-
+from collections import deque
 import pandas as pd
 from binance.client import Client
 import asyncio
@@ -33,24 +33,30 @@ def get_binance_klines_data(timestamp_start, timestamp_end, symbol, interval='1m
 def get_current_futures_position(symbols):
     account_info = client.futures_account()
     positions = account_info['positions']
-    df_futures_position = pd.DataFrame([position for position in positions if position['symbol'] in symbols]).set_index("symbol")[['entryPrice', 'positionAmt']].astype(float)
-    return df_futures_position
+    df_futures_position = pd.DataFrame([position for position in positions if position['symbol'] in symbols]).set_index("symbol")[['entryPrice', 'positionAmt', 'leverage']].astype(float)
+    max_withdraw_amount = float(account_info['maxWithdrawAmount'])
+    return df_futures_position, max_withdraw_amount
 
 def create_order(symbol, price, quantity, leverage, is_dryrun=False):
     side = "BUY" if quantity > 0 else "SELL"
-    quantity = str(abs(Decimal(str(quantity)) * Decimal(leverage)))
+    quantity = str(abs(Decimal(str(quantity))))
     if not is_dryrun and quantity != '0':
-        order = client.futures_create_order(
-            symbol=symbol,
-            side=side,
-            price=price,
-            quantity=quantity,
-            leverage=leverage,
-            timeInForce='GTC',
-            type="LIMIT",
-            reduceOnly=False
-        )
+        try:
+            order = client.futures_create_order(
+                symbol=symbol,
+                side=side,
+                price=price,
+                quantity=quantity,
+                #leverage=leverage,
+                timeInForce='GTC',
+                type="LIMIT",
+                reduceOnly=False
+            )
+        except:
+            print(f'Failed to create order for {symbol} {side} {quantity} at price {price}')
+            return False
     print(f'{side} {quantity} {symbol} at price {price}, leverage={leverage}')
+    return True
 
 def get_futures_trading_rules():
     with open('./futures_trading_rules/futures_trading_rules.csv', 'r') as f:
@@ -63,7 +69,12 @@ def get_futures_order_book(symbol):
 
 
 def order_with_quantity(df, quantity_column_name, price_column_name, is_dryrun=False, leverage=1):
-    df.sort_values(by='changing_position_in_usdt', key=lambda x:x.abs()).apply(lambda x: create_order(symbol=x.name, price=x[price_column_name], quantity=x[quantity_column_name], leverage=leverage, is_dryrun=is_dryrun), axis=1)
+    unfilled_symbols = deque(df.index)
+    while unfilled_symbols:
+        symbol = unfilled_symbols.popleft()
+        if not create_order(symbol=symbol, price=df.loc[symbol, price_column_name], quantity=df.loc[symbol, quantity_column_name], leverage=leverage, is_dryrun=is_dryrun):
+            unfilled_symbols.append(symbol)
+
 
 def cancel_all_orders(symbols):
     for symbol in symbols:
@@ -79,26 +90,32 @@ def cancel_all_orders(symbols):
 
 if __name__ == '__main__':
     is_dryrun = True
+    minimum_initial_usdt = 300
+    leverage = 3
     pd.set_option('display.max_columns', 500)
     pd.set_option('display.width', 1000)
     symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT']
     close_48hours = {}
     dict_df_klines = {}
+    df_current_futures_position, max_withdraw_amount = get_current_futures_position(symbols)
+    old_leverage = df_current_futures_position['leverage'].iloc[0] # we assume leverage are all the same
     if not is_dryrun:
         cancel_all_orders(symbols)
-    df_current_futures_position = get_current_futures_position(symbols)
+        for symbol in symbols:
+            client.futures_change_leverage(symbol=symbol, leverage=str(leverage))
     past_price = {symbol: float(client.futures_historical_klines(symbol, '1h', '48 hours ago UTC')[0][4]) for symbol in symbols}
     current_price = {symbol: float(client.futures_ticker(symbol=symbol)['lastPrice']) for symbol in symbols}
     dict_df_close = {symbol: pd.DataFrame({'close': [past_price[symbol], current_price[symbol]]}, index=['past', 'current']) for symbol in symbols}
     alphas = alpha_collection.Alphas()
-    df_weight = alphas.close_momentum_nday(dict_df_close, n=1, weight_max=0.05, shift=0, rename_weight=False).loc[['current']].T.rename(columns={'current':'next_position_usdt'}) # we have a pre-processed data, so n must be 1, shift must be 0
+    df_weight = alphas.close_momentum_nday(dict_df_close, n=1, weight_max=None, shift=0).loc[['current']].T.rename(columns={'current':'next_position_usdt'}) # we have a pre-processed data, so n must be 1, shift must be 0
     df_current_price_and_amount = pd.DataFrame.from_dict(current_price, orient='index', columns=['price']).join(df_current_futures_position)
-    total_quantity = np.max([(df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum(), 300])
-    df_quantity = (df_weight * total_quantity)
+    non_leveraged_total_quantity_usdt = ((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount) * 0.95
+    non_leveraged_total_quantity_usdt = np.max([non_leveraged_total_quantity_usdt, minimum_initial_usdt])
+    df_quantity = df_weight * non_leveraged_total_quantity_usdt * leverage
     df_quantity_and_price = df_quantity.join(df_current_price_and_amount)\
-        .assign(current_position_in_usdt=lambda x: x.positionAmt * x.price)\
-        .assign(changing_position_in_usdt=lambda x: x.next_position_usdt - x.current_position_in_usdt)\
-        .assign(margin_increase=lambda x: x.next_position_usdt.abs() - x.current_position_in_usdt.abs())
-    df_quantity_and_price_trimmed = trim_quantity(df_quantity_and_price, usdt_column_name='changing_position_in_usdt', price_column_name='price').sort_values('margin_increase')
-    order_with_quantity(df_quantity_and_price_trimmed, quantity_column_name='quantity_trimmed', price_column_name='price', leverage=1, is_dryrun=is_dryrun)
+        .assign(current_position_usdt=lambda x: x.positionAmt * x.price)\
+        .assign(changing_position_usdt=lambda x: x.next_position_usdt - x.current_position_usdt)\
+        .assign(margin_increase=lambda x: x.next_position_usdt.abs() - x.current_position_usdt.abs())
+    df_quantity_and_price_trimmed = trim_quantity(df_quantity_and_price, usdt_column_name='changing_position_usdt', price_column_name='price').sort_values('margin_increase')
+    order_with_quantity(df_quantity_and_price_trimmed, quantity_column_name='quantity_trimmed', price_column_name='price', leverage=leverage, is_dryrun=is_dryrun)
     print()
