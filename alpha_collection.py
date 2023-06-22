@@ -9,7 +9,7 @@ class Alphas:
         weight = rank(close price change compared to n days ago)
         '''
         df_agg = pd.concat(
-            [df_klines['close'].astype('float').pct_change(n).shift(1).rename(f'{symbol}_weight') for symbol, df_klines
+            [df_klines['close'].astype('float').pct_change(n).shift(1).rename(symbol) for symbol, df_klines
              in dict_df_klines.items()], axis=1)
         df_rank = df_agg.rank(axis=1)
         df_neutralized_weight = neutralize_weight(df_rank)
@@ -20,18 +20,18 @@ class Alphas:
         weight = -rank(close price change compared to n days ago)
         '''
         df_agg = pd.concat(
-            [-df_klines['close'].astype('float').pct_change(n).shift(1).rename(f'{symbol}_weight') for symbol, df_klines
+            [-df_klines['close'].astype('float').pct_change(n).shift(1).rename(symbol) for symbol, df_klines
              in dict_df_klines.items()], axis=1)
         df_rank = df_agg.rank(axis=1)
         df_neutralized_weight = neutralize_weight(df_rank)
         return df_neutralized_weight
 
-    def close_momentum_nday(self, dict_df_klines: dict, n=1, weight_max=None, shift=1, rename_weight=True):
+    def close_momentum_nday(self, dict_df_klines: dict, n=1, weight_max=None, shift=1):
         '''
         weight = close price change compared to n days ago
         '''
         df_agg = pd.concat(
-            [df_klines['close'].astype('float').pct_change(n).shift(shift).rename(f'{symbol}{"_weight" if rename_weight else ""}') for symbol, df_klines
+            [df_klines['close'].astype('float').pct_change(n).shift(shift).rename(symbol) for symbol, df_klines
              in dict_df_klines.items()], axis=1)
         if weight_max is not None:
             df_agg = df_agg.clip(-weight_max, weight_max)
@@ -43,7 +43,7 @@ class Alphas:
         weight = -(close price change compared to n days ago)
         '''
         df_agg = pd.concat(
-            [-df_klines['close'].astype('float').pct_change(n).shift(1).rename(f'{symbol}_weight') for symbol, df_klines
+            [-df_klines['close'].astype('float').pct_change(n).shift(1).rename(symbol) for symbol, df_klines
              in dict_df_klines.items()], axis=1)
         df_neutralized_weight = neutralize_weight(df_agg)
         return df_neutralized_weight
@@ -53,7 +53,7 @@ class Alphas:
         weight = rank(volume / nday volume mean)
         '''
         df_agg = pd.concat(
-            [(df_klines['volume'].astype('float') / df_klines['volume'].astype('float').rolling(n).mean()).shift(1).rename(f'{symbol}_weight') for symbol, df_klines
+            [(df_klines['volume'].astype('float') / df_klines['volume'].astype('float').rolling(n).mean()).shift(1).rename(symbol) for symbol, df_klines
              in dict_df_klines.items()], axis=1)
         df_rank = df_agg.rank(axis=1)
         df_neutralized_weight = neutralize_weight(df_rank)
@@ -64,7 +64,7 @@ class Alphas:
         weight = volume / nday volume mean
         '''
         df_agg = pd.concat(
-            [(df_klines['volume'].astype('float') / df_klines['volume'].astype('float').rolling(n).mean()).shift(1).rename(f'{symbol}_weight') for symbol, df_klines
+            [(df_klines['volume'].astype('float') / df_klines['volume'].astype('float').rolling(n).mean()).shift(1).rename(symbol) for symbol, df_klines
              in dict_df_klines.items()], axis=1)
         df_neutralized_weight = neutralize_weight(df_agg)
         return df_neutralized_weight
@@ -74,7 +74,17 @@ class Alphas:
         weight = correlation(open, close, n)
         '''
         df_agg = pd.concat(
-            [df_klines['open'].shift(1).rolling(n).corr(df_klines['close'].shift(1)).rename(f'{symbol}_weight') for symbol, df_klines
+            [df_klines['open'].shift(1).rolling(n).corr(df_klines['close'].shift(1)).rename(symbol) for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight
+
+    def close_position_in_high_and_low(self, dict_df_klines:dict):
+        '''
+        weight = close position in high and low
+        '''
+        df_agg = pd.concat(
+            [((df_klines['close'].astype('float') - df_klines['low'].astype('float')) / (df_klines['high'].astype('float') - df_klines['low'].astype('float'))).shift(1).rename(symbol) for symbol, df_klines
              in dict_df_klines.items()], axis=1)
         df_neutralized_weight = neutralize_weight(df_agg)
         return df_neutralized_weight
