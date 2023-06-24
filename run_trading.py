@@ -52,8 +52,8 @@ def create_order(symbol, price, quantity, leverage, is_dryrun=False):
                 type="LIMIT",
                 reduceOnly=False
             )
-        except:
-            print(f'Failed to create order for {symbol} {side} {quantity} at price {price}')
+        except Exception as e:
+            print(f'Failed to create order for {symbol} {side} {quantity} at price {price}', "Exception:", type(e).__name__)
             return False
     print(f'{side} {quantity} {symbol} at price {price}, leverage={leverage}')
     return True
@@ -90,7 +90,6 @@ def cancel_all_orders(symbols):
 
 if __name__ == '__main__':
     is_dryrun = True
-    minimum_initial_usdt = 300
     leverage = 3
     pd.set_option('display.max_columns', 500)
     pd.set_option('display.width', 1000)
@@ -103,14 +102,15 @@ if __name__ == '__main__':
         cancel_all_orders(symbols)
         for symbol in symbols:
             client.futures_change_leverage(symbol=symbol, leverage=str(leverage))
-    past_price = {symbol: float(client.futures_historical_klines(symbol, '1h', '48 hours ago UTC')[0][4]) for symbol in symbols}
+    # past_price = {symbol: float(client.futures_historical_klines(symbol, '1h', '120 hours ago UTC')[0][4]) for symbol in symbols}
+    past_price = {symbol: [float(kline[4]) for i, kline in enumerate(client.futures_historical_klines(symbol, '1h', '96 hours ago UTC')) if i in [0, 24, 48, 72]] for symbol in symbols}
     current_price = {symbol: float(client.futures_ticker(symbol=symbol)['lastPrice']) for symbol in symbols}
-    dict_df_close = {symbol: pd.DataFrame({'close': [past_price[symbol], current_price[symbol]]}, index=['past', 'current']) for symbol in symbols}
+    dict_df_close = {symbol: pd.DataFrame({'close':past_price[symbol] + [current_price[symbol]]}) for symbol in symbols}
     alphas = alpha_collection.Alphas()
-    df_weight = alphas.close_momentum_nday(dict_df_close, n=1, weight_max=None, shift=0).loc[['current']].T.rename(columns={'current':'next_position_usdt'}) # we have a pre-processed data, so n must be 1, shift must be 0
+    df_weight = pd.DataFrame(alphas.bollinger_band_nday(dict_df_close, n=5, shift=0).iloc[-1].T.rename('next_position_usdt'))
+    # df_weight = alphas.close_momentum_nday(dict_df_close, n=1, weight_max=None, shift=0).loc[['current']].T.rename(columns={'current':'next_position_usdt'}) # we have a pre-processed data, so n must be 1, shift must be 0
     df_current_price_and_amount = pd.DataFrame.from_dict(current_price, orient='index', columns=['price']).join(df_current_futures_position)
     non_leveraged_total_quantity_usdt = ((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount) * 0.95
-    non_leveraged_total_quantity_usdt = np.max([non_leveraged_total_quantity_usdt, minimum_initial_usdt])
     df_quantity = df_weight * non_leveraged_total_quantity_usdt * leverage
     df_quantity_and_price = df_quantity.join(df_current_price_and_amount)\
         .assign(current_position_usdt=lambda x: x.positionAmt * x.price)\
