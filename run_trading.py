@@ -87,6 +87,15 @@ def log_order(data_list, is_dryrun):
                 msg = f'{data[1]} {data[2]} {data[0]} at price {data[3]}, usd {round(float(data[2]) * float(data[3]), 2)}, leverage={data[4]}'
                 print(msg)
 
+def log_total_quantity(quantity):
+    csv_file = './logs/total_quantity.csv'
+    file_exists = os.path.isfile(csv_file)
+    with open(csv_file, 'a', newline='') as file:
+        writer = csv.writer(file, delimiter=',')
+        if not file_exists:
+            writer.writerow(['time', 'quantity'])
+        writer.writerow([str(datetime.now()), str(quantity)])
+
 def order_with_quantity(df, quantity_column_name, price_column_name, is_dryrun=False, leverage=1):
     unfilled_symbols = deque(df.index)
     data_list = []
@@ -142,4 +151,6 @@ if __name__ == '__main__':
         .assign(margin_increase=lambda x: x.next_position_usdt.abs() - x.current_position_usdt.abs())
     df_quantity_and_price_trimmed = trim_quantity(df_quantity_and_price, usdt_column_name='changing_position_usdt', price_column_name='price').sort_values('margin_increase')
     order_with_quantity(df_quantity_and_price_trimmed, quantity_column_name='quantity_trimmed', price_column_name='price', leverage=leverage, is_dryrun=is_dryrun)
+    if not is_dryrun:
+        log_total_quantity(((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount))
     print()
