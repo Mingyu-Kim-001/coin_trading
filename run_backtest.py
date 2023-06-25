@@ -2,13 +2,21 @@ import datetime
 import pandas as pd
 from coin_trading_backtest import market_neutral_trading_backtest_binance
 from alpha_collection import Alphas
+import matplotlib.pyplot as plt
+
+def save_backtest_result_figure(backtest_result, alpha_name, start_date, end_date, leverage):
+    fig, ax = plt.subplots(figsize=(20, 10))
+    ax.plot(backtest_result['date'], backtest_result['cumulative_return'], label='cumulative_return')
+    ax.set_xlim([start_date, end_date])
+    ax.set_yscale('log')
+    fig.savefig(f'./figures/{alpha_name}_{start_date}~{end_date}_leverage={leverage}.png')
 
 pd.set_option('display.max_columns', 500)
 pd.set_option('display.width', 1000)
 backtest = market_neutral_trading_backtest_binance()
 alpahs = Alphas()
 # alpha_org_names = [alpha_name for alpha_name in alpahs.__dir__() if not alpha_name.startswith('_')]
-alpha_org_names = ['close_momentum_nday', 'close_position_in_moving_average_nday', 'bollinger_band_nday']
+alpha_org_names = ['close_momentum_nday', 'bollinger_band_nday']
 dict_alphas = {}
 for alpha_name in alpha_org_names:
     if 'nday' in alpha_name:
@@ -28,6 +36,7 @@ past_recent_split_date = datetime.date(2023, 1, 1)
 end_date = datetime.date(2023, 6, 10)
 print(f'spot {start_date} ~ {end_date}')
 symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT']#, 'BNBUSDT', 'DOTUSDT']
+leverage = 4
 # symbols = ['BTCUSDT', 'ETHUSDT']
 
 for symbol in symbols:
@@ -41,7 +50,7 @@ for alpha_name, alpha in dict_alphas.items():
     df_weight_recent.loc[df_date < pd.to_datetime(past_recent_split_date), :] = 0
     final_return, possible_maximum_drawdown, win_day_rate = [] , [], []
     for df_weight, is_past in zip([df_weight_past, df_weight_recent], [True, False]):
-        backtest_result = backtest.backtest_coin_strategy(df_weight, dict_df_klines, df_date, symbols, leverage=3)
+        backtest_result = backtest.backtest_coin_strategy(df_weight, dict_df_klines, df_date, symbols, leverage=leverage)
         final_return.append(round(backtest_result['cumulative_return'].iloc[-1], 2))
         possible_maximum_drawdown.append(round(backtest_result['possible_maximum_drawdown'].min(), 2))
         win_day_rate.append(round(sum(backtest_result['return'] > 0) / len(backtest_result.loc[lambda x: x['return'] != 0]), 4))
@@ -65,11 +74,15 @@ for alpha_name, alpha in dict_alphas.items():
     df_weight_recent.loc[df_date < pd.to_datetime(future_past_recent_split_date), :] = 0
     final_return, possible_maximum_drawdown, win_day_rate = [] , [], []
     for df_weight, is_past in zip([df_weight_past, df_weight_recent], [True, False]):
-        backtest_result = backtest.backtest_coin_strategy(df_weight, dict_df_klines_futures, df_date, symbols, leverage=3)
+        backtest_result = backtest.backtest_coin_strategy(df_weight, dict_df_klines_futures, df_date, symbols, leverage=leverage)
         final_return.append(round(backtest_result['cumulative_return'].iloc[-1], 2))
         possible_maximum_drawdown.append(round(backtest_result['possible_maximum_drawdown'].min(), 2))
         win_day_rate.append(
             round(sum(backtest_result['return'] > 0) / len(backtest_result.loc[lambda x: x['return'] != 0]), 4))
+        start_date = future_start_date if is_past else future_past_recent_split_date
+        end_date = future_past_recent_split_date if is_past else future_end_date
+        save_backtest_result_figure(backtest_result, alpha_name, start_date, end_date, leverage=leverage)
     print(alpha_name, 'final return', final_return, 'possible_maximum_drawdown', possible_maximum_drawdown, [f'{future_start_date} ~ {future_past_recent_split_date}', f'{future_past_recent_split_date} ~ {future_end_date}'], 'win_day_rate', win_day_rate)
+
 
 
