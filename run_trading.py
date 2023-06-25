@@ -4,11 +4,12 @@ from collections import deque
 import pandas as pd
 from binance.client import Client
 import asyncio
-from binance import AsyncClient, BinanceSocketManager, ThreadedWebsocketManager
 
 import alpha_collection
 from utils import *
 from decimal import Decimal
+import time
+import csv
 
 
 api_key = os.getenv('BINANCE_API_KEY')
@@ -54,9 +55,10 @@ def create_order(symbol, price, quantity, leverage, is_dryrun=False):
             )
         except Exception as e:
             print(f'Failed to create order for {symbol} {side} {quantity} at price {price}', "Exception:", type(e).__name__)
+            time.sleep(0.0001)
             return False
-    print(f'{side} {quantity} {symbol} at price {price}, leverage={leverage}')
-    return True
+    data = [symbol, side, quantity, price, leverage]
+    return True, data
 
 def get_futures_trading_rules():
     with open('./futures_trading_rules/futures_trading_rules.csv', 'r') as f:
@@ -67,13 +69,35 @@ def get_futures_order_book(symbol):
     order_book = client.futures_order_book(symbol=symbol)
     return order_book
 
+def log_order(data_list, is_dryrun):
+    if is_dryrun:
+        for data in data_list:
+            msg = f'{data[1]} {data[2]} {data[0]} at price {data[3]}, usd {round(float(data[2]) * float(data[3]), 2)}, leverage={data[4]}'
+            print(msg)
+    else:
+        csv_file = './logs/buy_log.csv'
+        file_exists = os.path.isfile(csv_file)
+        with open(csv_file, 'a', newline='') as file:
+            writer = csv.writer(file, delimiter=',')
+            if not file_exists:
+                writer.writerow(['time', 'symbol', 'side', 'quantity', 'price', 'leverage'])
+
+            for data in data_list:
+                writer.writerow([str(datetime.now())] + [str(e) for e in data])
+                msg = f'{data[1]} {data[2]} {data[0]} at price {data[3]}, usd {round(float(data[2]) * float(data[3]), 2)}, leverage={data[4]}'
+                print(msg)
 
 def order_with_quantity(df, quantity_column_name, price_column_name, is_dryrun=False, leverage=1):
     unfilled_symbols = deque(df.index)
+    data_list = []
     while unfilled_symbols:
         symbol = unfilled_symbols.popleft()
-        if not create_order(symbol=symbol, price=df.loc[symbol, price_column_name], quantity=df.loc[symbol, quantity_column_name], leverage=leverage, is_dryrun=is_dryrun):
+        is_success, data = create_order(symbol=symbol, price=df.loc[symbol, price_column_name], quantity=df.loc[symbol, quantity_column_name], leverage=leverage, is_dryrun=is_dryrun)
+        if not is_success:
             unfilled_symbols.append(symbol)
+        else:
+            data_list.append(data)
+    log_order(data_list, is_dryrun)
 
 
 def cancel_all_orders(symbols):
@@ -90,7 +114,7 @@ def cancel_all_orders(symbols):
 
 if __name__ == '__main__':
     is_dryrun = True
-    leverage = 3
+    leverage = 4
     pd.set_option('display.max_columns', 500)
     pd.set_option('display.width', 1000)
     symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT']
@@ -107,7 +131,7 @@ if __name__ == '__main__':
     current_price = {symbol: float(client.futures_ticker(symbol=symbol)['lastPrice']) for symbol in symbols}
     dict_df_close = {symbol: pd.DataFrame({'close':past_price[symbol] + [current_price[symbol]]}) for symbol in symbols}
     alphas = alpha_collection.Alphas()
-    df_weight = pd.DataFrame(alphas.bollinger_band_nday(dict_df_close, n=5, shift=0).iloc[-1].T.rename('next_position_usdt'))
+    df_weight = pd.DataFrame(alphas.bollinger_band_nday(dict_df_close, n=4, shift=0).iloc[-1].T.rename('next_position_usdt'))
     # df_weight = alphas.close_momentum_nday(dict_df_close, n=1, weight_max=None, shift=0).loc[['current']].T.rename(columns={'current':'next_position_usdt'}) # we have a pre-processed data, so n must be 1, shift must be 0
     df_current_price_and_amount = pd.DataFrame.from_dict(current_price, orient='index', columns=['price']).join(df_current_futures_position)
     non_leveraged_total_quantity_usdt = ((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount) * 0.95
