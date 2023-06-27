@@ -100,12 +100,14 @@ class Alphas:
         return df_neutralized_weight
 
 
-    def bollinger_band_nday(self, dict_df_klines:dict, n=20, shift=1):
+    def bollinger_band_nday(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
         '''
         weight = close position in bollinger band
         '''
         df_agg = pd.concat(
             [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).mean().shift(1)) / df_klines['close'].astype('float').rolling(n).std().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
              in dict_df_klines.items()], axis=1)
+        if weight_max is not None:
+            df_agg = df_agg.clip(-weight_max, weight_max)
         df_neutralized_weight = neutralize_weight(df_agg)
         return df_neutralized_weight
