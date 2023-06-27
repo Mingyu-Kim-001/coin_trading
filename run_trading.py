@@ -56,7 +56,7 @@ def create_order(symbol, price, quantity, leverage, is_dryrun=False):
         except Exception as e:
             print(f'Failed to create order for {symbol} {side} {quantity} at price {price}', "Exception:", type(e).__name__)
             time.sleep(0.0001)
-            return False
+            return False, None
     data = [symbol, side, quantity, price, leverage]
     return True, data
 
@@ -122,11 +122,12 @@ def cancel_all_orders(symbols):
 
 
 if __name__ == '__main__':
-    is_dryrun = True
-    leverage = 4
+    is_dryrun = False
+    leverage = 5
+    budget_allocation = 0.8
     pd.set_option('display.max_columns', 500)
     pd.set_option('display.width', 1000)
-    symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT']
+    symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT', 'DOTUSDT']
     close_48hours = {}
     dict_df_klines = {}
     df_current_futures_position, max_withdraw_amount = get_current_futures_position(symbols)
@@ -143,7 +144,7 @@ if __name__ == '__main__':
     df_weight = pd.DataFrame(alphas.bollinger_band_nday(dict_df_close, n=4, shift=0).iloc[-1].T.rename('next_position_usdt'))
     # df_weight = alphas.close_momentum_nday(dict_df_close, n=1, weight_max=None, shift=0).loc[['current']].T.rename(columns={'current':'next_position_usdt'}) # we have a pre-processed data, so n must be 1, shift must be 0
     df_current_price_and_amount = pd.DataFrame.from_dict(current_price, orient='index', columns=['price']).join(df_current_futures_position)
-    non_leveraged_total_quantity_usdt = ((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount) * 0.95
+    non_leveraged_total_quantity_usdt = ((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount) * budget_allocation
     df_quantity = df_weight * non_leveraged_total_quantity_usdt * leverage
     df_quantity_and_price = df_quantity.join(df_current_price_and_amount)\
         .assign(current_position_usdt=lambda x: x.positionAmt * x.price)\
