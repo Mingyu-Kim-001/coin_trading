@@ -5,6 +5,14 @@ class Alphas:
     def __init__(self):
         pass
 
+    def hold_bitcoin(self, dict_df_klines: dict):
+        '''
+        weight = 1 for bitcoin
+        '''
+        df_agg = pd.concat([pd.Series([1] * len(df_klines) if symbol == 'BTCUSDT' else [0] * len(df_klines), index=df_klines.index, name=symbol).rename(symbol) for symbol, df_klines in dict_df_klines.items()], axis=1)
+        df_agg = df_agg.fillna(0)
+        return df_agg
+
     def close_momentum_nday_rank(self, dict_df_klines: dict, n=1):
         '''
         weight = rank(close price change compared to n days ago)
@@ -101,7 +109,7 @@ class Alphas:
         return df_neutralized_weight
 
 
-    def close_in_nday_bollinger_band(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
+    def close_position_in_nday_bollinger_band(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
         '''
         weight = close position in bollinger band
         '''
@@ -111,6 +119,44 @@ class Alphas:
         if weight_max is not None:
             df_agg = df_agg.clip(-weight_max, weight_max)
         df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight
+
+    def close_position_in_nday_bollinger_band_std(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
+        '''
+        weight = close position in bollinger band * std
+        '''
+        df_agg = pd.concat(
+            [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).mean().shift(1)) / df_klines['close'].astype('float').rolling(n).std().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        df_std = pd.concat([df_klines['close'].astype('float').rolling(n).std().shift(1).rename(symbol) for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        df_weight = neutralize_weight(df_agg) * df_std
+        df_neutralized_weight = neutralize_weight(df_weight)
+        return df_neutralized_weight
+
+    def close_position_in_nday_bollinger_band_square(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
+        '''
+        weight = signed_square(close position in bollinger band)
+        '''
+        df_agg = pd.concat(
+            [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).mean().shift(1)) / df_klines['close'].astype('float').rolling(n).std().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        #square, with consistent
+        df_agg = df_agg * df_agg * np.sign(df_agg)
+        if weight_max is not None:
+            df_agg = df_agg.clip(-weight_max, weight_max)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight
+
+    def close_position_in_nday_bollinger_band_rank(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
+        '''
+        weight = rank(close position in bollinger band)
+        '''
+        df_agg = pd.concat(
+            [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).mean().shift(1)) / df_klines['close'].astype('float').rolling(n).std().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        df_rank = df_agg.rank(axis=1)
+        df_neutralized_weight = neutralize_weight(df_rank)
         return df_neutralized_weight
 
     def high_in_nday_bollinger_band(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
@@ -212,18 +258,45 @@ class Alphas:
     #     '''
     #     df_agg_list = []
     #     for symbol, df_klines in dict_df_klines.items():
-    #         df_klines['vwap'] =
-    #         df_agg_symbol = df_klines['open'].astype('float') - df_klines['vwap'].astype('float').rolling(n).mean()
-    #         df_agg_symbol = df_agg_symbol.rank()
-    #         df_agg_symbol = df_agg_symbol * -(df_klines['close'].astype('float') - df_klines['vwap'].astype('float')).abs().rank()
-    #         df_agg_symbol = df_agg_symbol.shift(shift).rename(symbol)
-    #         df_agg_list.append(df_agg_symbol)
+    #         df_klines['vwap'] = (df_klines['high'].astype('float') + df_klines['low'].astype('float') + df_klines['close'].astype('float')) / 3
+    #         df_klines['vwap'] = df_klines.rolling(n).apply(lambda x: (x['high'].astype('float') + x['low'].astype('float') + x['close'].astype('float')) / 3, raw=True)
+    #         df_agg_symbol = df_klines['open'].astype('float') - df_klines['vwap']
+
+
+    def alpha_6_nday(self, dict_df_klines, n=10, shift=1):
+        '''
+        weight = (-1 * correlation(open, volume, 10))
+        '''
+        df_agg_list = []
+        for symbol, df_klines in dict_df_klines.items():
+            df_agg_symbol = df_klines['open'].astype('float').rolling(n).corr(df_klines['volume'].astype('float'))
+            df_agg_symbol = -df_agg_symbol.shift(shift).rename(symbol)
+            df_agg_list.append(df_agg_symbol)
+        df_agg = pd.concat(df_agg_list, axis=1)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight
+
+    def alpha_7(self, dict_df_klines, shift=1):
+        '''
+        weight =  (adv20 < volume) ? ((-1 * ts_rank(abs(delta(close, 7)), 60)) * sign(delta(close, 7))) : -1
+        '''
+        df_agg_list = []
+        for symbol, df_klines in dict_df_klines.items():
+            adv20 = df_klines['volume'].astype('float').rolling(20).mean()
+            A = df_klines['close'].astype('float').diff(7).abs().rolling(60).apply(lambda x: pd.Series(x).rank().iloc[-1]) * np.sign(df_klines['close'].astype('float').diff(7))
+            B = -1
+            df_agg_symbol = pd.Series(np.where(adv20 < df_klines['volume'].astype('float'), A, B), index=df_klines.index)
+            df_agg_symbol = df_agg_symbol.shift(shift).rename(symbol)
+            df_agg_list.append(df_agg_symbol)
+        df_agg = pd.concat(df_agg_list, axis=1)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight
 
 if __name__ == '__main__':
     symbols = ['BTCUSDT', 'ETHUSDT']
     start_date = '2022-01-01'
-    end_date = '2022-01-31'
-    alpha_name = 'alpha_4_nday'
+    end_date = '2022-06-30'
+    alpha_name = 'alpha_7'
     backtest = market_neutral_trading_backtest_binance()
     dict_df_klines = {}
     for symbol in symbols:
