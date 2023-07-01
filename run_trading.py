@@ -122,7 +122,7 @@ def cancel_all_orders(symbols):
 
 
 if __name__ == '__main__':
-    is_dryrun = False
+    is_dryrun = True
     leverage = 5
     budget_allocation = 0.8
     pd.set_option('display.max_columns', 500)
@@ -141,7 +141,7 @@ if __name__ == '__main__':
     current_price = {symbol: float(client.futures_ticker(symbol=symbol)['lastPrice']) for symbol in symbols}
     dict_df_close = {symbol: pd.DataFrame({'close':past_price[symbol] + [current_price[symbol]]}) for symbol in symbols}
     alphas = alpha_collection.Alphas()
-    df_weight = pd.DataFrame(alphas.bollinger_band_nday(dict_df_close, n=4, shift=0).iloc[-1].T.rename('next_position_usdt'))
+    df_weight = pd.DataFrame(alphas.close_position_in_nday_bollinger_band(dict_df_close, n=4, shift=0).iloc[-1].T.rename('next_position_usdt'))
     # df_weight = alphas.close_momentum_nday(dict_df_close, n=1, weight_max=None, shift=0).loc[['current']].T.rename(columns={'current':'next_position_usdt'}) # we have a pre-processed data, so n must be 1, shift must be 0
     df_current_price_and_amount = pd.DataFrame.from_dict(current_price, orient='index', columns=['price']).join(df_current_futures_position)
     non_leveraged_total_quantity_usdt = ((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount) * budget_allocation
