@@ -160,11 +160,11 @@ if __name__ == '__main__':
         cancel_all_orders(symbols)
         for symbol in symbols:
             client.futures_change_leverage(symbol=symbol, leverage=str(leverage))
-    past_price = {symbol: [float(kline[1]) for i, kline in enumerate(client.futures_historical_klines(symbol, '1h', '21 hours ago UTC'))] for symbol in symbols}
+    past_price = {symbol: [float(kline[1]) for i, kline in enumerate(client.futures_historical_klines(symbol, '1h', '96 hours ago UTC'))] for symbol in symbols}
     current_price = {symbol: float(client.futures_ticker(symbol=symbol)['lastPrice']) for symbol in symbols}
     dict_df_close = {symbol: pd.DataFrame({'close': past_price[symbol] + [current_price[symbol]]}) for symbol in symbols}
     alphas = alpha_collection.Alphas()
-    df_weight = pd.DataFrame(alphas.close_position_in_nday_bollinger_band(dict_df_close, n=20, shift=0).iloc[-1].T.rename('next_position_usdt'))
+    df_weight = pd.DataFrame(alphas.close_position_in_nday_bollinger_band(dict_df_close, n=95, shift=0).iloc[-1].T.rename('next_position_usdt'))
     df_current_price_and_amount = pd.DataFrame.from_dict(current_price, orient='index', columns=['price']).join(df_current_futures_position)
     non_leveraged_total_quantity_usdt = ((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount) * budget_allocation
     df_quantity = df_weight * non_leveraged_total_quantity_usdt * leverage
@@ -176,5 +176,5 @@ if __name__ == '__main__':
     order_with_quantity(df_quantity_and_price_trimmed, quantity_column_name='quantity_trimmed', price_column_name='price', leverage=leverage, is_dryrun=is_dryrun)
     if not is_dryrun:
         log_total_quantity(((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount))
-        log_each_quantity(df_quantity_and_price_trimmed, usdt_column_name='next_position_usdt', price_column_name='price')
+        # log_each_quantity(df_quantity_and_price_trimmed, usdt_column_name='next_position_usdt', price_column_name='price')
     print()
