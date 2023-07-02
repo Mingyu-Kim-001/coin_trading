@@ -1,9 +1,8 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import deque
-import pandas as pd
 from binance.client import Client
-import asyncio
+import argparse
 
 import alpha_collection
 from utils import *
@@ -12,9 +11,7 @@ import time
 import csv
 
 
-api_key = os.getenv('BINANCE_API_KEY')
-api_secret = os.getenv('BINANCE_SECRET_API_KEY')
-client = Client(api_key, api_secret)
+
 
 def get_binance_klines_data(timestamp_start, timestamp_end, symbol, interval='1m'):
     timestamp_start_str = str(int(timestamp_start.timestamp()))
@@ -120,13 +117,40 @@ def cancel_all_orders(symbols):
             else:
                 print(f"Failed to cancel order {order_id}. Error: {cancel_response['msg']}")
 
+# def log_each_quantity(df, quantity_column_name, price_column_name):
+#     csv_file = './logs/total_quantity.csv'
+#     file_exists = os.path.isfile(csv_file)
+#     with open(csv_file, 'a', newline='') as file:
+#         writer = csv.writer(file, delimiter=',')
+#         if not file_exists:
+#             writer.writerow(df.index)
+#         writer.writerow([str(datetime.now())] + [str(e) for e in data])
+#         msg = f'{data[1]} {data[2]} {data[0]} at price {data[3]}, usd {round(float(data[2]) * float(data[3]), 2)}, leverage={data[4]}'
+#         print(msg)
+#     for symbol in df.index:
+#         quantity = df.loc[symbol, quantity_column_name]
+#         price = df.loc[symbol, price_column_name]
+#         msg = f'{symbol} {quantity} at price {price}, usd {round(float(quantity) * float(price), 2)}'
+#         print(msg)
+
 
 if __name__ == '__main__':
-    is_dryrun = True
-    leverage = 5
-    budget_allocation = 0.8
+    parser = argparse.ArgumentParser(description='Receive input')
+    parser.add_argument('--dryrun', default=True, help='dryrun')
+    parser.add_argument('--leverage', default=5, help='leverage')
+    parser.add_argument('--budget_allocation', default=0.3, help='budget_allocation')
+    parser.add_argument('--api_key', help='api_key')
+    parser.add_argument('--api_secret', help='api_secret')
+    args = parser.parse_args()
+    is_dryrun, leverage, budget_allocation = bool(args.dryrun), int(args.leverage), float(args.budget_allocation)
+    api_key, api_secret = args.api_key, args.api_secret
+    if api_key is None or api_secret is None:
+        api_key = os.getenv('BINANCE_API_KEY')
+        api_secret = os.getenv('BINANCE_SECRET_API_KEY')
     pd.set_option('display.max_columns', 500)
     pd.set_option('display.width', 1000)
+    client = Client(api_key, api_secret)
+    print(f'is_dryrun={is_dryrun}, leverage={leverage}, budget_allocation={budget_allocation}')
     symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT', 'DOTUSDT']
     close_48hours = {}
     dict_df_klines = {}
@@ -136,13 +160,11 @@ if __name__ == '__main__':
         cancel_all_orders(symbols)
         for symbol in symbols:
             client.futures_change_leverage(symbol=symbol, leverage=str(leverage))
-    # past_price = {symbol: float(client.futures_historical_klines(symbol, '1h', '120 hours ago UTC')[0][4]) for symbol in symbols}
-    past_price = {symbol: [float(kline[4]) for i, kline in enumerate(client.futures_historical_klines(symbol, '1h', '96 hours ago UTC')) if i in [0, 24, 48, 72]] for symbol in symbols}
+    past_price = {symbol: [float(kline[1]) for i, kline in enumerate(client.futures_historical_klines(symbol, '1h', '21 hours ago UTC'))] for symbol in symbols}
     current_price = {symbol: float(client.futures_ticker(symbol=symbol)['lastPrice']) for symbol in symbols}
-    dict_df_close = {symbol: pd.DataFrame({'close':past_price[symbol] + [current_price[symbol]]}) for symbol in symbols}
+    dict_df_close = {symbol: pd.DataFrame({'close': past_price[symbol] + [current_price[symbol]]}) for symbol in symbols}
     alphas = alpha_collection.Alphas()
-    df_weight = pd.DataFrame(alphas.close_position_in_nday_bollinger_band(dict_df_close, n=4, shift=0).iloc[-1].T.rename('next_position_usdt'))
-    # df_weight = alphas.close_momentum_nday(dict_df_close, n=1, weight_max=None, shift=0).loc[['current']].T.rename(columns={'current':'next_position_usdt'}) # we have a pre-processed data, so n must be 1, shift must be 0
+    df_weight = pd.DataFrame(alphas.close_position_in_nday_bollinger_band(dict_df_close, n=20, shift=0).iloc[-1].T.rename('next_position_usdt'))
     df_current_price_and_amount = pd.DataFrame.from_dict(current_price, orient='index', columns=['price']).join(df_current_futures_position)
     non_leveraged_total_quantity_usdt = ((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount) * budget_allocation
     df_quantity = df_weight * non_leveraged_total_quantity_usdt * leverage
@@ -154,4 +176,5 @@ if __name__ == '__main__':
     order_with_quantity(df_quantity_and_price_trimmed, quantity_column_name='quantity_trimmed', price_column_name='price', leverage=leverage, is_dryrun=is_dryrun)
     if not is_dryrun:
         log_total_quantity(((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount))
+        log_each_quantity(df_quantity_and_price_trimmed, usdt_column_name='next_position_usdt', price_column_name='price')
     print()
