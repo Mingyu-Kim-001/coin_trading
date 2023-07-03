@@ -117,28 +117,27 @@ def cancel_all_orders(symbols):
             else:
                 print(f"Failed to cancel order {order_id}. Error: {cancel_response['msg']}")
 
-# def log_each_quantity(df, quantity_column_name, price_column_name):
-#     csv_file = './logs/total_quantity.csv'
-#     file_exists = os.path.isfile(csv_file)
-#     with open(csv_file, 'a', newline='') as file:
-#         writer = csv.writer(file, delimiter=',')
-#         if not file_exists:
-#             writer.writerow(df.index)
-#         writer.writerow([str(datetime.now())] + [str(e) for e in data])
-#         msg = f'{data[1]} {data[2]} {data[0]} at price {data[3]}, usd {round(float(data[2]) * float(data[3]), 2)}, leverage={data[4]}'
-#         print(msg)
-#     for symbol in df.index:
-#         quantity = df.loc[symbol, quantity_column_name]
-#         price = df.loc[symbol, price_column_name]
-#         msg = f'{symbol} {quantity} at price {price}, usd {round(float(quantity) * float(price), 2)}'
-#         print(msg)
+def log_position(df, past_quantity_column_name, change_quantity_column_name, entry_price_column_name, current_price_column_name):
+    csv_file = './logs/position.csv'
+    file_exists = os.path.isfile(csv_file)
+    time_str = str(datetime.now())
+    with open(csv_file, 'a', newline='') as file:
+        writer = csv.writer(file, delimiter=',')
+        if not file_exists:
+            writer.writerow(['time', 'symbol', 'past_quantity', 'new_quantity', 'entry_price', 'current_price'])
+        for symbol in df.index:
+            past_quantity = df.loc[symbol, past_quantity_column_name]
+            new_quantity = df.loc[symbol, change_quantity_column_name]
+            entry_price = df.loc[symbol, entry_price_column_name]
+            current_price = df.loc[symbol, current_price_column_name]
+            writer.writerow([time_str, symbol, past_quantity, new_quantity, entry_price, current_price])
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Receive input')
-    parser.add_argument('--dryrun', default=True, help='dryrun')
-    parser.add_argument('--leverage', default=5, help='leverage')
-    parser.add_argument('--budget_allocation', default=0.3, help='budget_allocation')
+    parser.add_argument('--dryrun', default=True, help='dryrun', type=lambda x: x.lower() == 'true')
+    parser.add_argument('--leverage', default=1, help='leverage', type=int)
+    parser.add_argument('--budget_allocation', default=0.1, help='budget_allocation', type=float)
     parser.add_argument('--api_key', help='api_key')
     parser.add_argument('--api_secret', help='api_secret')
     args = parser.parse_args()
@@ -152,7 +151,6 @@ if __name__ == '__main__':
     client = Client(api_key, api_secret)
     print(f'is_dryrun={is_dryrun}, leverage={leverage}, budget_allocation={budget_allocation}')
     symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT', 'DOTUSDT']
-    close_48hours = {}
     dict_df_klines = {}
     df_current_futures_position, max_withdraw_amount = get_current_futures_position(symbols)
     old_leverage = df_current_futures_position['leverage'].iloc[0] # we assume leverage are all the same
@@ -160,11 +158,11 @@ if __name__ == '__main__':
         cancel_all_orders(symbols)
         for symbol in symbols:
             client.futures_change_leverage(symbol=symbol, leverage=str(leverage))
-    past_price = {symbol: [float(kline[1]) for i, kline in enumerate(client.futures_historical_klines(symbol, '1h', '96 hours ago UTC'))] for symbol in symbols}
+    alphas = alpha_collection.Alphas()
+    past_price = {symbol: [float(kline[1]) for i, kline in enumerate(client.futures_historical_klines(symbol, '1h', '101 hours ago UTC'))] for symbol in symbols}
     current_price = {symbol: float(client.futures_ticker(symbol=symbol)['lastPrice']) for symbol in symbols}
     dict_df_close = {symbol: pd.DataFrame({'close': past_price[symbol] + [current_price[symbol]]}) for symbol in symbols}
-    alphas = alpha_collection.Alphas()
-    df_weight = pd.DataFrame(alphas.close_position_in_nday_bollinger_band(dict_df_close, n=95, shift=0).iloc[-1].T.rename('next_position_usdt'))
+    df_weight = pd.DataFrame(alphas.close_position_in_nday_bollinger_band_median(dict_df_close, n=100, shift=0).iloc[-1].T.rename('next_position_usdt'))
     df_current_price_and_amount = pd.DataFrame.from_dict(current_price, orient='index', columns=['price']).join(df_current_futures_position)
     non_leveraged_total_quantity_usdt = ((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount) * budget_allocation
     df_quantity = df_weight * non_leveraged_total_quantity_usdt * leverage
@@ -176,5 +174,7 @@ if __name__ == '__main__':
     order_with_quantity(df_quantity_and_price_trimmed, quantity_column_name='quantity_trimmed', price_column_name='price', leverage=leverage, is_dryrun=is_dryrun)
     if not is_dryrun:
         log_total_quantity(((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount))
-        # log_each_quantity(df_quantity_and_price_trimmed, usdt_column_name='next_position_usdt', price_column_name='price')
+        log_position(df_quantity_and_price_trimmed, past_quantity_column_name='positionAmt',
+                     change_quantity_column_name='quantity_trimmed', entry_price_column_name='entryPrice',
+                     current_price_column_name='price')
     print()
