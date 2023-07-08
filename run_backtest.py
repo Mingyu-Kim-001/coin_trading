@@ -95,8 +95,7 @@ def log_backtest_result(backtest_result, date_start, date_end, is_future, is_sav
         save_backtest_result_figure(backtest_result, alpha_name, date_start, date_end, leverage, is_future)
 
 
-def backtest_for_alpha(alpha, symbols, dict_df_klines, df_test_timestamp, leverage=1, is_future=False, is_save_figure=False):
-    df_weight = alpha(dict_df_klines)
+def backtest_for_alpha(symbols, df_weight, dict_df_klines, df_test_timestamp, leverage=1, is_future=False, is_save_figure=False):
     df_data_timestamp = list(dict_df_klines.values())[0]['timestamp']
     test_idx = df_data_timestamp.loc[df_data_timestamp.isin(df_test_timestamp)].index
     dict_df_klines_test = {symbol: df_klines.loc[df_klines.index.isin(test_idx)] for symbol, df_klines in dict_df_klines.items()}
@@ -118,7 +117,7 @@ symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 
 
 alpahs = Alphas()
 # alpha_org_names = [alpha_name for alpha_name in alpahs.__dir__() if not alpha_name.startswith('_')]
-alpha_org_names = ['close_position_in_nday_bollinger_band']
+alpha_org_names = ['close_position_in_nday_bollinger_band_median_2']
 dict_alphas = {}
 for alpha_name in alpha_org_names:
     # if
@@ -127,7 +126,7 @@ for alpha_name in alpha_org_names:
     #         dict_alphas[alpha_name + f'_{n}'] = (lambda name, n: lambda x: getattr(alpahs, name)(x, n))(alpha_name, n)
     if 'nday' in alpha_name:
         # for n in [3,4,5,6,7,8,10,15,20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140]:
-        for n in [30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140]:
+        for n in [70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140]:
         # for n in [60]:
         # for n in [2]:
         # for n in [20]:
@@ -161,21 +160,23 @@ print(f'spot {start_date} ~ {end_date}')
 
 print('-------------------')
 dict_df_klines_futures = {}
-future_start_date = datetime.datetime(2019, 9, 8, 8, 0, 0)
+hour = 9
+future_start_date = datetime.datetime(2019, 9, 8, hour, 0, 0)
 # future_start_date = datetime.datetime(2020, 1, 1, 9, 0, 0)
-date_1 = datetime.datetime(2021, 1, 1, 8, 0, 0)
-date_2 = datetime.datetime(2022, 1, 1, 8, 0, 0)
-date_3 = datetime.datetime(2023, 1, 1, 8, 0, 0)
-date_4 = datetime.datetime(2023, 6, 25, 8, 0, 0)
-future_end_date = datetime.datetime(2023, 6, 29, 8, 0, 0)
+date_1 = datetime.datetime(2021, 1, 1, hour, 0, 0)
+date_2 = datetime.datetime(2022, 1, 1, hour, 0, 0)
+date_3 = datetime.datetime(2023, 1, 1, hour, 0, 0)
+date_4 = datetime.datetime(2023, 7, 1, hour, 0, 0)
+future_end_date = datetime.datetime(2023, 7, 4, hour, 0, 0)
 date_intervals = [[future_start_date, future_end_date], [future_start_date, date_1], [date_1, date_2], [date_2, date_3], [date_3, future_end_date], [date_2, future_end_date], [date_4, future_end_date]]
 for symbol in symbols:
     dict_df_klines_futures[symbol] = get_binance_klines_data_1h(symbol, future_start_date, future_end_date, freq=data_freq, is_future=True)
 for alpha_name, alpha in dict_alphas.items():
     print(alpha_name)
+    df_weight = alpha(dict_df_klines_futures)
     for datetime_start, datetime_end in date_intervals:
         df_test_timestamp = pd.date_range(datetime_start, datetime_end, freq=trade_freq)
-        backtest_for_alpha(alpha, symbols, dict_df_klines_futures, df_test_timestamp, leverage=leverage, is_future=True, is_save_figure=False)
+        backtest_for_alpha(symbols, df_weight, dict_df_klines_futures, df_test_timestamp, leverage=leverage, is_future=True, is_save_figure=False)
     print()
 print('-------------------')
 
