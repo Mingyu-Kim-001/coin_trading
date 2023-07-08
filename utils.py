@@ -1,9 +1,10 @@
 import duckdb
-import math
 import numpy as np
 import pandas as pd
 from decimal import Decimal
 import math
+import requests
+import os
 
 
 def query_on_pandas_df(str_query: str, **kwargs) -> pd.DataFrame:
@@ -47,3 +48,8 @@ def trim_quantity(df_quantity_and_price, usdt_column_name, price_column_name):
         df_quantity_and_price.quantity_trimmed)
     df_quantity_and_price[f"{usdt_column_name}_trimmed"] = df_quantity_and_price.quantity_trimmed * df_quantity_and_price.price
     return df_quantity_and_price
+
+def send_slack_message(text, slack_token, channel_name):
+    requests.post("https://slack.com/api/chat.postMessage",
+                  headers={"Authorization": "Bearer " + slack_token},
+                  data={"channel": channel_name, "text": text})
