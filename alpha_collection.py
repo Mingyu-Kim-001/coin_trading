@@ -133,6 +133,46 @@ class Alphas:
         df_neutralized_weight = neutralize_weight(df_agg)
         return df_neutralized_weight
 
+    def close_position_in_nday_bollinger_band_median_2(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
+        '''
+        weight = close position in bollinger band
+        '''
+        df_agg = pd.concat(
+            [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).median().shift(1)) / df_klines['close'].astype('float').rolling(24).std().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        if weight_max is not None:
+            df_agg = df_agg.clip(-weight_max, weight_max)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight
+
+
+    def close_position_in_nday_bollinger_band_weighted(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
+        '''
+        weight = close position in bollinger band
+        '''
+        #length n, weight starts from 0.9 and ends at 1.1
+        avg_weights = np.linspace(0.9, 1.1, n)
+        df_agg = pd.concat(
+            [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).apply(lambda x:np.average(x, weights=avg_weights)).shift(1)) / df_klines['close'].astype('float').rolling(n).std().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        if weight_max is not None:
+            df_agg = df_agg.clip(-weight_max, weight_max)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight
+
+
+    def close_position_in_nday_bollinger_band_median_with_volume(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
+        '''
+        weight = close position in bollinger band
+        '''
+        df_agg = pd.concat(
+            [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).median().shift(1)) / df_klines['close'].astype('float').rolling(n).std().shift(1) * df_klines['volume'].astype('float') / df_klines['volume'].astype('float').rolling(48).mean().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        if weight_max is not None:
+            df_agg = df_agg.clip(-weight_max, weight_max)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight
+
     def close_position_in_nday_bollinger_band_std(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
         '''
         weight = close position in bollinger band * std
