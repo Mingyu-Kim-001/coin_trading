@@ -1,7 +1,6 @@
 import pandas as pd
 from utils import *
 from coin_trading_backtest import market_neutral_trading_backtest_binance
-from numba import jit
 class Alphas:
     def __init__(self):
         pass
