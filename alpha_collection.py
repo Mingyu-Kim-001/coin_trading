@@ -132,7 +132,23 @@ class Alphas:
         df_neutralized_weight = neutralize_weight(df_agg)
         return df_neutralized_weight
 
-    def close_position_in_nday_bollinger_band_median_2(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
+    def close_position_in_nday_bollinger_band_median_longshort(self, dict_df_klines:dict, n=20, shift=1):
+        '''
+        weight = close position in bollinger band
+        '''
+        df_agg_long = pd.concat(
+            [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).median().shift(1)) / df_klines['close'].astype('float').rolling(n).std().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        n = 24
+        df_agg_short = pd.concat(
+            [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).median().shift(1)) / df_klines['close'].astype('float').rolling(n).std().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        df_agg = np.where(df_agg_short < 0, df_agg_short, df_agg_long)
+        df_agg = pd.DataFrame(df_agg, index=df_agg_long.index, columns=df_agg_long.columns)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight
+
+    def close_position_in_nday_bollinger_band_median_short_term_std(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
         '''
         weight = close position in bollinger band
         '''
@@ -342,6 +358,21 @@ class Alphas:
         df_agg = pd.concat(df_agg_list, axis=1)
         df_neutralized_weight = neutralize_weight(df_agg)
         return df_neutralized_weight
+
+    def alpha_8(self, dict_df_klines, shift=1):
+        '''
+        weight = (-1 * rank(((sum(open, 5) * sum(returns, 5)) - delay((sum(open, 5) * sum(returns, 5)), 10))))
+        '''
+        df_agg_list = []
+        for symbol, df_klines in dict_df_klines.items():
+            df_agg_symbol = df_klines['open'].astype('float').rolling(120).sum() * df_klines['close'].astype('float').pct_change(120).rolling(120).sum()
+            df_agg_symbol = df_agg_symbol - df_agg_symbol.shift(240)
+            df_agg_symbol = -df_agg_symbol.rank().shift(shift).rename(symbol)
+            df_agg_list.append(df_agg_symbol)
+        df_agg = pd.concat(df_agg_list, axis=1)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight
+
 
 if __name__ == '__main__':
     symbols = ['BTCUSDT', 'ETHUSDT']
