@@ -117,7 +117,7 @@ symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 
 
 alpahs = Alphas()
 # alpha_org_names = [alpha_name for alpha_name in alpahs.__dir__() if not alpha_name.startswith('_')]
-alpha_org_names = ['close_position_in_nday_bollinger_band_median_2']
+alpha_org_names = ['close_position_in_nday_bollinger_band_median', 'alpha_8']
 dict_alphas = {}
 for alpha_name in alpha_org_names:
     # if
@@ -160,14 +160,14 @@ print(f'spot {start_date} ~ {end_date}')
 
 print('-------------------')
 dict_df_klines_futures = {}
-hour = 9
+hour = 8
 future_start_date = datetime.datetime(2019, 9, 8, hour, 0, 0)
 # future_start_date = datetime.datetime(2020, 1, 1, 9, 0, 0)
 date_1 = datetime.datetime(2021, 1, 1, hour, 0, 0)
 date_2 = datetime.datetime(2022, 1, 1, hour, 0, 0)
 date_3 = datetime.datetime(2023, 1, 1, hour, 0, 0)
-date_4 = datetime.datetime(2023, 7, 1, hour, 0, 0)
-future_end_date = datetime.datetime(2023, 7, 4, hour, 0, 0)
+date_4 = datetime.datetime(2023, 7, 7, hour, 0, 0)
+future_end_date = datetime.datetime(2023, 7, 9, hour, 0, 0)
 date_intervals = [[future_start_date, future_end_date], [future_start_date, date_1], [date_1, date_2], [date_2, date_3], [date_3, future_end_date], [date_2, future_end_date], [date_4, future_end_date]]
 for symbol in symbols:
     dict_df_klines_futures[symbol] = get_binance_klines_data_1h(symbol, future_start_date, future_end_date, freq=data_freq, is_future=True)
