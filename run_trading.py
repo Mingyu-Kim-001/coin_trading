@@ -41,6 +41,8 @@ def create_order(symbol, price, quantity, leverage, is_dryrun=False):
     return True, data
 
 def log_order(order_data_list, is_dryrun=True):
+    #current timestamp in date time format
+    print(datetime.now())
     msg_list = [f'{data[1]} {data[2]} {data[0]} at price {data[3]}, usd {round(float(data[2]) * float(data[3]), 2)}, leverage={data[4]}' for data in order_data_list]
     if is_dryrun:
         for msg in msg_list:
@@ -150,11 +152,12 @@ if __name__ == '__main__':
     parser.add_argument('--dryrun', default=True, help='dryrun', type=lambda x: x.lower() != 'false')
     parser.add_argument('--leverage', default=6, help='leverage', type=int)
     parser.add_argument('--budget_allocation', default=0.7, help='budget_allocation', type=float)
+    parser.add_argument('--budget_keep', default=0, help='budget_keep', type=float)
     parser.add_argument('--api_key', help='api_key')
     parser.add_argument('--api_secret', help='api_secret')
     parser.add_argument('--slack_token', help='slack_token')
     args = parser.parse_args()
-    is_dryrun, leverage, budget_allocation = bool(args.dryrun), int(args.leverage), float(args.budget_allocation)
+    is_dryrun, leverage, budget_allocation, budget_keep = bool(args.dryrun), int(args.leverage), float(args.budget_allocation), float(args.budget_keep)
     api_key, api_secret, slack_token = args.api_key, args.api_secret, args.slack_token
     if api_key is None or api_secret is None:
         api_key = os.getenv('BINANCE_API_KEY')
@@ -163,7 +166,6 @@ if __name__ == '__main__':
         slack_token = os.getenv('PERSONAL_SLACK_TOKEN')
     pd.set_option('display.max_columns', 500)
     pd.set_option('display.width', 1000)
-    budget_keep = 685
     client = Client(api_key, api_secret)
     print(f'is_dryrun={is_dryrun}, leverage={leverage}, budget_allocation={budget_allocation}')
     symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT', 'DOTUSDT']
