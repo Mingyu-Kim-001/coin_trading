@@ -128,7 +128,18 @@ class Alphas:
             [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).median().shift(1)) / df_klines['close'].astype('float').rolling(n).std().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
              in dict_df_klines.items()], axis=1)
         df_neutralized_weight = neutralize_weight(df_agg)
-        return df_neutralized_weight
+        return df_neutralized_weight, df_neutralized_weight.index
+
+    def close_position_in_nday_bollinger_band_median_with_trade_timing(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
+        '''
+        weight = close position in bollinger band
+        '''
+        df_agg = pd.concat(
+            [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).median().shift(1)) / df_klines['close'].astype('float').rolling(n).std().shift(1)).rename(symbol) for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        additional_timing_to_trade_idx = df_agg[(df_agg.abs() > 4).any(axis=1)].index
+        return df_neutralized_weight, additional_timing_to_trade_idx
 
     def close_position_in_nday_bollinger_band_median_budget_allocation(self, dict_df_klines:dict, n=20, shift=1):
         '''
