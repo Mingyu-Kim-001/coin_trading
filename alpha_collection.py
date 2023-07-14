@@ -127,10 +127,19 @@ class Alphas:
         df_agg = pd.concat(
             [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).median().shift(1)) / df_klines['close'].astype('float').rolling(n).std().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
              in dict_df_klines.items()], axis=1)
-        if weight_max is not None:
-            df_agg = df_agg.clip(-weight_max, weight_max)
         df_neutralized_weight = neutralize_weight(df_agg)
         return df_neutralized_weight
+
+    def close_position_in_nday_bollinger_band_median_budget_allocation(self, dict_df_klines:dict, n=20, shift=1):
+        '''
+        weight = close position in bollinger band
+        '''
+        df_agg = pd.concat(
+            [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).median().shift(1)) / df_klines['close'].astype('float').rolling(n).std().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        df_neutralized_weight_allocated = pd.DataFrame(df_neutralized_weight * np.where(df_agg.max(axis=1) < 0.8, 0.8, 1).reshape(-1, 1), columns=df_neutralized_weight.columns)
+        return df_neutralized_weight_allocated
 
     def close_position_in_nday_bollinger_band_median_longshort(self, dict_df_klines:dict, n=20, shift=1):
         '''
