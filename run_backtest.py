@@ -183,10 +183,9 @@ for alpha_name, alpha in dict_alphas.items():
         ###
         additional_timing_to_trade_idx = df_trade_timestamp_idx
         ###
-
         df_weight_filtered = filter_weight(df_weight, df_trade_timestamp_idx, additional_timing_to_trade_idx)
-        df_weight_filtered = df_weight_filtered.shift(1)
         df_weight_extended = extend_weight(df_weight_filtered, df_data_range_idx)
+
         backtest_for_alpha(symbols, df_weight_extended, dict_df_klines_futures, datetime_start, datetime_end, leverage=leverage, is_future=True, is_save_figure=False)
     print()
 print('-------------------')
