@@ -31,7 +31,7 @@ def get_binance_klines_data_1h(symbol, start_datetime=datetime.datetime(2017, 1,
     for column in ['open', 'high', 'low', 'close', 'volume']:
         df_extended[column] = df_extended[column].astype(float)
     if symbol == 'DOGEUSDT':
-        df_extended = df_extended[df_extended['timestamp'] >= pd.to_datetime('2022-01-01')]  # remove volatile data
+        df_extended[df_extended['timestamp'] < pd.to_datetime('2022-01-01')] = 0 # remove volatile data
     return df_extended
 
 
@@ -42,11 +42,11 @@ def backtest_coin_strategy(df_neutralized_weight, dict_df_klines, symbols, stop_
     df_agg = pd.DataFrame(df_timestamp, columns=['timestamp'], index=df_neutralized_weight.index)
     for symbol in symbols:
         df_neutralized_weight_symbol = df_neutralized_weight[symbol]
-        pct_change = dict_df_klines[symbol]['open'].pct_change().shift(-1).fillna(0).replace([-np.inf, np.inf], 0)
-        daily_maximum_drawdown = (dict_df_klines[symbol]['open'] - dict_df_klines[symbol]['low']) / \
-                                 dict_df_klines[symbol]['open'] - 1
-        daily_maximum_gain = (dict_df_klines[symbol]['high'] - dict_df_klines[symbol]['open']) / dict_df_klines[symbol][
-            'open'] - 1
+        df_klines = dict_df_klines[symbol].loc[lambda x:x.index.isin(df_neutralized_weight_symbol.index)]
+        pct_change = df_klines['open'].pct_change().shift(-1).fillna(0).replace([-np.inf, np.inf], 0)
+        daily_maximum_drawdown = (df_klines['open'] - df_klines['low']) / \
+                                 df_klines['open'] - 1
+        daily_maximum_gain = (df_klines['high'] - df_klines['open']) / df_klines['open'] - 1
         # is_stop_loss = ((df_neutralized_weight_symbol < 0) & (daily_maximum_drawdown < stop_loss)) #\
         #                | ((df_neutralized_weight_symbol > 0) & (daily_maximum_gain > -stop_loss))
         # dict_df_return[symbol] = pd.Series(np.where(is_stop_loss,
@@ -102,20 +102,25 @@ def backtest_for_alpha(symbols, df_weight, dict_df_klines, datetime_start, datet
     backtest_result = backtest_coin_strategy(df_weight, dict_df_klines, symbols, leverage=leverage, stop_loss=-1)
     log_backtest_result(backtest_result, datetime_start, datetime_end, is_future, is_save_figure=is_save_figure)
 
-def filter_weight(df_weight, df_trade_timestamp_idx, additional_timing_to_trade_idx):
+def fit_weight_and_klines(df_weight, dict_df_klines, df_trade_timestamp_idx, additional_timing_to_trade_idx):
     if additional_timing_to_trade_idx is not None:
         df_weight_filtered = df_weight.loc[lambda x:(x.index.isin(df_trade_timestamp_idx)) | (x.index.isin(additional_timing_to_trade_idx))]
     else:
         df_weight_filtered = df_weight.loc[lambda x: x.index.isin(df_trade_timestamp_idx)]
-    return df_weight_filtered
+    weight_index = df_weight_filtered.index
+    lag_weight_index = [weight_index[i+1] if i < len(weight_index) - 1 else max(weight_index) + 1 for i in range(len(weight_index))]
+    dict_df_klines_fit = {}
+    for symbol, df_klines in dict_df_klines.items():
+        df_klines_fit = pd.DataFrame(index=weight_index)
+        df_klines_fit['timestamp'] = [df_klines.loc[idx, 'timestamp'] for idx in weight_index]
+        df_klines_fit['open'] = [df_klines.loc[idx, 'open'] for idx in weight_index]
+        df_klines_fit['high'] = [df_klines.loc[idx:lag_idx-1, 'high'].max() for idx, lag_idx in zip(weight_index, lag_weight_index)]
+        df_klines_fit['low'] = [df_klines.loc[idx:lag_idx-1, 'low'].min() for idx, lag_idx in zip(weight_index, lag_weight_index)]
+        df_klines_fit['close'] = [df_klines.loc[lag_idx-1, 'close'] for lag_idx in lag_weight_index]
+        df_klines_fit['volume'] = [df_klines.loc[idx:lag_idx-1, 'volume'].sum() for idx, lag_idx in zip(weight_index, lag_weight_index)]
+        dict_df_klines_fit[symbol] = df_klines_fit
+    return df_weight_filtered, dict_df_klines_fit
 
-def weight_into_data_range(df_weight, df_data_range_idx):
-    df_weight_fit = pd.DataFrame(index=df_data_range_idx, columns=df_weight.columns)
-    fit_index = df_weight.loc[df_weight.index.isin(df_data_range_idx)].index
-    df_weight_fit.loc[fit_index] = df_weight.loc[fit_index]
-    df_weight_fit = df_weight_fit.ffill().fillna(0)
-    df_weight_fit.loc[~df_weight_fit.index.isin(df_data_range_idx)] = 0
-    return df_weight_fit
 
 
 pd.set_option('display.max_columns', 500)
@@ -166,7 +171,7 @@ symbols = ['BTCUSDT', 'XRPUSDT', 'ETHUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 
 
 dict_df_klines_futures = {}
 hour = 8
-future_start_date = datetime.datetime(2019, 9, 8, hour, 0, 0)
+future_start_date = datetime.datetime(2019, 9, 10, hour, 0, 0)
 # future_start_date = datetime.datetime(2020, 1, 1, 9, 0, 0)
 date_1 = datetime.datetime(2021, 1, 1, hour, 0, 0)
 date_2 = datetime.datetime(2022, 1, 1, hour, 0, 0)
@@ -182,9 +187,8 @@ for alpha_name, alpha in dict_alphas.items():
     for datetime_start, datetime_end in date_intervals:
         df_trade_timestamp_idx = list(dict_df_klines_futures.values())[0].loc[lambda x: x.timestamp.isin(pd.date_range(datetime_start, datetime_end, freq=trade_freq))].index # to restore index
         df_data_range_idx = list(dict_df_klines_futures.values())[0].loc[lambda x: x.timestamp.isin(pd.date_range(datetime_start, datetime_end, freq=data_freq))].index
-        df_weight_filtered = filter_weight(df_weight, df_trade_timestamp_idx, additional_timing_to_trade_idx)
-        df_weight_fit = weight_into_data_range(df_weight_filtered, df_data_range_idx)
-        backtest_for_alpha(symbols, df_weight_fit, dict_df_klines_futures, datetime_start, datetime_end, leverage=leverage, is_future=True, is_save_figure=False)
+        df_weight_filtered, dict_df_klines_futures_fit = fit_weight_and_klines(df_weight, dict_df_klines_futures, df_trade_timestamp_idx, additional_timing_to_trade_idx)
+        backtest_for_alpha(symbols, df_weight_filtered, dict_df_klines_futures_fit, datetime_start, datetime_end, leverage=leverage, is_future=True, is_save_figure=False)
     print()
 print('-------------------')
 
