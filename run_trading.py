@@ -177,10 +177,10 @@ if __name__ == '__main__':
         for symbol in symbols:
             client.futures_change_leverage(symbol=symbol, leverage=str(leverage))
     alphas = alpha_collection.Alphas()
-    past_price = {symbol: [float(kline[4]) for kline in client.futures_historical_klines(symbol, '1h', '101 hours ago UTC')[:-1]] for symbol in symbols}
+    past_price = {symbol: [float(kline[4]) for kline in client.futures_historical_klines(symbol, '1h', '112 hours ago UTC')[:-1]] for symbol in symbols}
     current_price = {symbol: float(client.futures_ticker(symbol=symbol)['lastPrice']) for symbol in symbols}
     dict_df_close = {symbol: pd.DataFrame({'close': past_price[symbol] + [current_price[symbol]]}) for symbol in symbols}
-    df_weight = pd.DataFrame(alphas.close_position_in_nday_bollinger_band_median(dict_df_close, n=100, shift=0).iloc[-1].T.rename('next_position_usdt'))
+    df_weight = pd.DataFrame(alphas.close_position_in_nday_bollinger_band_median(dict_df_close, n=110, shift=0)[0].iloc[-1].T.rename('next_position_usdt'))
     df_current_price_and_amount = pd.DataFrame.from_dict(current_price, orient='index', columns=['price']).join(df_current_futures_position)
     total_quantity_usdt = ((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount)
     trading_quantity_usdt = (total_quantity_usdt - budget_keep) * budget_allocation

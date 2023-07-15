@@ -75,6 +75,7 @@ def backtest_coin_strategy(df_neutralized_weight, dict_df_klines, symbols, stop_
     df_agg['cumulative_fee'] = df_agg['fee'].cumsum()
     df_agg['cumulative_return'] = (1 + df_agg['return_net']).cumprod()
     df_agg['possible_maximum_drawdown'] = get_possible_maximum_drawdown(df_agg['cumulative_return'])
+    df_agg['one_shot_maximum_drawdown'] = get_maximum_drawdown_one_shot(df_agg['cumulative_return'])
     return df_agg
 
 def save_backtest_result_figure(backtest_result, alpha_name, start_date, end_date, leverage, is_future):
@@ -90,8 +91,9 @@ def save_backtest_result_figure(backtest_result, alpha_name, start_date, end_dat
 def log_backtest_result(backtest_result, date_start, date_end, is_future, is_save_figure):
     final_return = round(backtest_result['cumulative_return'].iloc[-1], 2)
     possible_maximum_drawdown = round(backtest_result['possible_maximum_drawdown'].min(), 2)
+    one_shot_maximum_drawdown = round(backtest_result['one_shot_maximum_drawdown'].min(), 2)
     win_rate = round(sum(backtest_result['return'] > 0) / len(backtest_result.loc[lambda x: x['return'] != 0]), 4)
-    print(date_start, '~', date_end, 'final_return', final_return, ', possible_maximum_drawdown', possible_maximum_drawdown, ', win_rate', win_rate)
+    print(date_start, '~', date_end, 'final_return', final_return, ', possible_maximum_drawdown', possible_maximum_drawdown, ', one_shot_maximum_drawdown', one_shot_maximum_drawdown, ', win_rate', win_rate)
     if is_save_figure:
         save_backtest_result_figure(backtest_result, alpha_name, date_start, date_end, leverage, is_future)
 
@@ -100,12 +102,27 @@ def backtest_for_alpha(symbols, df_weight, dict_df_klines, datetime_start, datet
     backtest_result = backtest_coin_strategy(df_weight, dict_df_klines, symbols, leverage=leverage, stop_loss=-1)
     log_backtest_result(backtest_result, datetime_start, datetime_end, is_future, is_save_figure=is_save_figure)
 
+def filter_weight(df_weight, df_trade_timestamp_idx, additional_timing_to_trade_idx):
+    if additional_timing_to_trade_idx is not None:
+        df_weight_filtered = df_weight.loc[lambda x:(x.index.isin(df_trade_timestamp_idx)) | (x.index.isin(additional_timing_to_trade_idx))]
+    else:
+        df_weight_filtered = df_weight.loc[lambda x: x.index.isin(df_trade_timestamp_idx)]
+    return df_weight_filtered
+
+def weight_into_data_range(df_weight, df_data_range_idx):
+    df_weight_fit = pd.DataFrame(index=df_data_range_idx, columns=df_weight.columns)
+    fit_index = df_weight.loc[df_weight.index.isin(df_data_range_idx)].index
+    df_weight_fit.loc[fit_index] = df_weight.loc[fit_index]
+    df_weight_fit = df_weight_fit.ffill().fillna(0)
+    df_weight_fit.loc[~df_weight_fit.index.isin(df_data_range_idx)] = 0
+    return df_weight_fit
+
 
 pd.set_option('display.max_columns', 500)
 pd.set_option('display.width', 1000)
 alpahs = Alphas()
 # alpha_org_names = [alpha_name for alpha_name in alpahs.__dir__() if not alpha_name.startswith('_')]
-shift = 0
+shift = 1
 alpha_org_names = ['close_position_in_nday_bollinger_band_median']
 dict_alphas = {}
 for alpha_name in alpha_org_names:
@@ -115,12 +132,12 @@ for alpha_name in alpha_org_names:
     #         dict_alphas[alpha_name + f'_{n}'] = (lambda name, n: lambda x: getattr(alpahs, name)(x, n))(alpha_name, n)
     if 'nday' in alpha_name:
         # for n in [3,4,5,6,7,8,10,15,20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140]:
-        # for n in [70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140]:
-        for n in [100]:
+        for n in [70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170]:
+        # for n in [100]:
         # for n in [60]:
         # for n in [2]:
         # for n in [20]:
-            dict_alphas[alpha_name + f'_{n}'] = (lambda name, n, shift: lambda x: getattr(alpahs, name)(x, n, shift=shift))(alpha_name, n, 1)
+            dict_alphas[alpha_name + f'_{n}'] = (lambda name, n, shift: lambda x: getattr(alpahs, name)(x, n, shift=shift))(alpha_name, n, shift)
             # if alpha_name == 'close_momentum_nday':
             # for weight_max in [0.5, 0.7, 0.9, 1, 1.5]:
             #     dict_alphas[alpha_name + f'_{n}_weight_max_{weight_max}'] = (lambda name, n, weight_max: lambda x: getattr(alpahs, name)(x, n, weight_max))(alpha_name, n, weight_max)
@@ -140,25 +157,11 @@ dict_df_klines = {}
 # date_interval = [[start_date, end_date], [start_date, date_1], [date_1, date_2], [date_2, date_3], [date_3, date_4], [date_4, date_5], [date_4, end_date], [date_5, end_date]]
 data_freq = '1h'
 trade_freq = '8h'
-shift = 8
 leverage = 5
 symbols = ['BTCUSDT', 'XRPUSDT', 'ETHUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT', 'DOTUSDT']#, 'BCHUSDT']# 'BNBUSDT']
 
 
-def filter_weight(df_weight, df_trade_timestamp_idx, additional_timing_to_trade_idx):
-    # df_weight.loc[lambda x:~x.index.isin(df_data_range_idx)] = 0
-    # new_weight = pd.DataFrame(index=range(len(df_weight)), columns=df_weight.columns)
-    # new_weight.loc[df_trade_timestamp_idx] = df_weight.loc[df_trade_timestamp_idx]
-    # new_weight.loc[additional_timing_to_trade_idx] = df_weight.loc[additional_timing_to_trade_idx]
-    df_weight_filtered = df_weight.loc[lambda x: (x.index.isin(df_trade_timestamp_idx)) | (x.index.isin(additional_timing_to_trade_idx))]
-    return df_weight_filtered
 
-def extend_weight(df_weight, df_data_range_idx):
-    df_weight_extended = pd.DataFrame(index=df_data_range_idx, columns=df_weight.columns)
-    df_weight_extended.loc[df_weight.index] = df_weight.loc[df_weight.index]
-    df_weight_extended = df_weight_extended.ffill().fillna(0)
-    df_weight_extended.loc[~df_weight_extended.index.isin(df_data_range_idx)] = 0
-    return df_weight_extended
 
 
 dict_df_klines_futures = {}
@@ -179,14 +182,9 @@ for alpha_name, alpha in dict_alphas.items():
     for datetime_start, datetime_end in date_intervals:
         df_trade_timestamp_idx = list(dict_df_klines_futures.values())[0].loc[lambda x: x.timestamp.isin(pd.date_range(datetime_start, datetime_end, freq=trade_freq))].index # to restore index
         df_data_range_idx = list(dict_df_klines_futures.values())[0].loc[lambda x: x.timestamp.isin(pd.date_range(datetime_start, datetime_end, freq=data_freq))].index
-
-        ###
-        additional_timing_to_trade_idx = df_trade_timestamp_idx
-        ###
         df_weight_filtered = filter_weight(df_weight, df_trade_timestamp_idx, additional_timing_to_trade_idx)
-        df_weight_extended = extend_weight(df_weight_filtered, df_data_range_idx)
-
-        backtest_for_alpha(symbols, df_weight_extended, dict_df_klines_futures, datetime_start, datetime_end, leverage=leverage, is_future=True, is_save_figure=False)
+        df_weight_fit = weight_into_data_range(df_weight_filtered, df_data_range_idx)
+        backtest_for_alpha(symbols, df_weight_fit, dict_df_klines_futures, datetime_start, datetime_end, leverage=leverage, is_future=True, is_save_figure=False)
     print()
 print('-------------------')
 
