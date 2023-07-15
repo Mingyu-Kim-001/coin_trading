@@ -33,6 +33,9 @@ def get_possible_maximum_drawdown(df_cumulative_return):
     df_drawdown = df_cumulative_return / df_cumulative_max - 1
     return df_drawdown
 
+def get_maximum_drawdown_one_shot(df_cumulative_return):
+    return df_cumulative_return.pct_change()
+
 
 def round_toward_zero(x, tick_size):
     return math.floor(x / tick_size) * tick_size if x > 0 else math.ceil(x / tick_size) * tick_size
