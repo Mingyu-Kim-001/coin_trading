@@ -44,16 +44,18 @@ def backtest_coin_strategy(df_neutralized_weight, dict_df_klines, symbols, stop_
         df_neutralized_weight_symbol = df_neutralized_weight[symbol]
         df_klines = dict_df_klines[symbol].loc[lambda x:x.index.isin(df_neutralized_weight_symbol.index)]
         pct_change = df_klines['open'].pct_change().shift(-1).fillna(0).replace([-np.inf, np.inf], 0)
-        daily_maximum_drawdown = (df_klines['open'] - df_klines['low']) / \
-                                 df_klines['open'] - 1
-        daily_maximum_gain = (df_klines['high'] - df_klines['open']) / df_klines['open'] - 1
+        log_change = np.log(1 + pct_change)
+        daily_maximum_drawdown = (dict_df_klines[symbol]['open'] - dict_df_klines[symbol]['low']) / \
+                                 dict_df_klines[symbol]['open'] - 1
+        daily_maximum_gain = (dict_df_klines[symbol]['high'] - dict_df_klines[symbol]['open']) / dict_df_klines[symbol][
+            'open'] - 1
         # is_stop_loss = ((df_neutralized_weight_symbol < 0) & (daily_maximum_drawdown < stop_loss)) #\
         #                | ((df_neutralized_weight_symbol > 0) & (daily_maximum_gain > -stop_loss))
         # dict_df_return[symbol] = pd.Series(np.where(is_stop_loss,
         #                                             -abs(stop_loss * df_neutralized_weight_symbol),
         #                                             pct_change * df_neutralized_weight_symbol
         #                                             ))
-        dict_df_return[symbol] = pct_change * df_neutralized_weight_symbol
+        dict_df_return[symbol] = np.exp(log_change * df_neutralized_weight_symbol) - 1
         df_neutralized_weight_symbol_lag = df_neutralized_weight_symbol.shift(1)
 
         # dict_df_trade_size[symbol] = pd.Series(
