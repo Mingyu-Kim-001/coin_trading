@@ -30,8 +30,8 @@ def get_binance_klines_data_1h(symbol, start_datetime=datetime.datetime(2017, 1,
     df_extended = df_date_dummy.merge(df, on='timestamp', how='left').fillna(0)
     for column in ['open', 'high', 'low', 'close', 'volume']:
         df_extended[column] = df_extended[column].astype(float)
-    if symbol == 'DOGEUSDT':
-        df_extended = df_extended[df_extended['timestamp'] >= pd.to_datetime('2022-01-01')]  # remove volatile data
+    # if symbol == 'DOGEUSDT':
+    #     df_extended = df_extended[df_extended['timestamp'] >= pd.to_datetime('2022-01-01')]  # remove volatile data
     return df_extended
 
 
@@ -166,7 +166,7 @@ symbols = ['BTCUSDT', 'XRPUSDT', 'ETHUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 
 
 dict_df_klines_futures = {}
 hour = 8
-future_start_date = datetime.datetime(2019, 9, 8, hour, 0, 0)
+future_start_date = datetime.datetime(2019, 9, 10, hour, 0, 0)
 # future_start_date = datetime.datetime(2020, 1, 1, 9, 0, 0)
 date_1 = datetime.datetime(2021, 1, 1, hour, 0, 0)
 date_2 = datetime.datetime(2022, 1, 1, hour, 0, 0)
