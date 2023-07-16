@@ -30,8 +30,8 @@ def get_binance_klines_data_1h(symbol, start_datetime=datetime.datetime(2017, 1,
     df_extended = df_date_dummy.merge(df, on='timestamp', how='left').fillna(0)
     for column in ['open', 'high', 'low', 'close', 'volume']:
         df_extended[column] = df_extended[column].astype(float)
-    if symbol == 'DOGEUSDT':
-        df_extended[df_extended['timestamp'] < pd.to_datetime('2022-01-01')] = 0 # remove volatile data
+    # if symbol == 'DOGEUSDT':
+    #     df_extended[df_extended['timestamp'] < pd.to_datetime('2022-01-01')] = 0 # remove volatile data
     return df_extended
 
 
@@ -111,13 +111,31 @@ def fit_weight_and_klines(df_weight, dict_df_klines, df_trade_timestamp_idx, add
     lag_weight_index = [weight_index[i+1] if i < len(weight_index) - 1 else max(weight_index) + 1 for i in range(len(weight_index))]
     dict_df_klines_fit = {}
     for symbol, df_klines in dict_df_klines.items():
-        df_klines_fit = pd.DataFrame(index=weight_index)
-        df_klines_fit['timestamp'] = [df_klines.loc[idx, 'timestamp'] for idx in weight_index]
-        df_klines_fit['open'] = [df_klines.loc[idx, 'open'] for idx in weight_index]
-        df_klines_fit['high'] = [df_klines.loc[idx:lag_idx-1, 'high'].max() for idx, lag_idx in zip(weight_index, lag_weight_index)]
-        df_klines_fit['low'] = [df_klines.loc[idx:lag_idx-1, 'low'].min() for idx, lag_idx in zip(weight_index, lag_weight_index)]
-        df_klines_fit['close'] = [df_klines.loc[lag_idx-1, 'close'] for lag_idx in lag_weight_index]
-        df_klines_fit['volume'] = [df_klines.loc[idx:lag_idx-1, 'volume'].sum() for idx, lag_idx in zip(weight_index, lag_weight_index)]
+        df_tmp = pd.DataFrame(index=df_klines.index)
+        df_tmp.loc[weight_index, 'new_idx'] = weight_index
+        df_tmp.ffill(inplace=True)
+        df_klines['new_idx'] = df_tmp['new_idx']
+        df_klines['original_idx'] = df_klines.index
+
+        df_klines_fit = query_on_pandas_df("""--sql
+            WITH rn_added
+                     AS (SELECT new_idx, timestamp, open, high, low, close, volume, new_idx, original_idx, 
+                                ROW_NUMBER() OVER (PARTITION BY new_idx ORDER BY original_idx)      rn_asc,
+                                ROW_NUMBER() OVER (PARTITION BY new_idx ORDER BY original_idx DESC) rn_desc
+                         FROM df_klines)
+            SELECT CAST(new_idx AS INT)                 new_idx,                  
+                   MAX(IF(rn_asc = 1, timestamp, NULL)) timestamp_tmp, --column name issue
+                   MAX(IF(rn_asc = 1, open, NULL))      open,
+                   MAX(high)                            high,
+                   MIN(low)                             low,
+                   MAX(IF(rn_desc = 1, close, NULL))    close_tmp, --column name issue
+                   SUM(volume)                          volume,
+            FROM rn_added
+            GROUP BY 1
+            ORDER BY 1
+        """)
+        df_klines_fit = df_klines_fit.rename(columns={'timestamp_tmp':'timestamp', 'close_tmp':'close'})
+        df_klines_fit = df_klines_fit.set_index('new_idx')
         dict_df_klines_fit[symbol] = df_klines_fit
     return df_weight_filtered, dict_df_klines_fit
 
