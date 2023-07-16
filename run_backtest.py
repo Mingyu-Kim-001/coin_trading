@@ -44,34 +44,32 @@ def backtest_coin_strategy(df_neutralized_weight, dict_df_klines, symbols, stop_
         df_neutralized_weight_symbol = df_neutralized_weight[symbol]
         df_klines = dict_df_klines[symbol].loc[lambda x:x.index.isin(df_neutralized_weight_symbol.index)]
         pct_change = df_klines['open'].pct_change().shift(-1).fillna(0).replace([-np.inf, np.inf], 0)
-        log_change = np.log(1 + pct_change)
-        daily_maximum_drawdown = (dict_df_klines[symbol]['open'] - dict_df_klines[symbol]['low']) / \
-                                 dict_df_klines[symbol]['open'] - 1
+        daily_maximum_drawdown = (dict_df_klines[symbol]['low'] - dict_df_klines[symbol]['open']) / \
+                                 dict_df_klines[symbol]['open']
         daily_maximum_gain = (dict_df_klines[symbol]['high'] - dict_df_klines[symbol]['open']) / dict_df_klines[symbol][
-            'open'] - 1
-        # is_stop_loss = ((df_neutralized_weight_symbol < 0) & (daily_maximum_drawdown < stop_loss)) #\
+            'open']
+        is_stop_loss = ((df_neutralized_weight_symbol < 0) & (daily_maximum_drawdown < stop_loss)) #\
         #                | ((df_neutralized_weight_symbol > 0) & (daily_maximum_gain > -stop_loss))
-        # dict_df_return[symbol] = pd.Series(np.where(is_stop_loss,
-        #                                             -abs(stop_loss * df_neutralized_weight_symbol),
-        #                                             pct_change * df_neutralized_weight_symbol
-        #                                             ))
-        dict_df_return[symbol] = np.exp(log_change * df_neutralized_weight_symbol) - 1
+        dict_df_return[symbol] = pd.Series(np.where(is_stop_loss,
+                                                    -abs(stop_loss * df_neutralized_weight_symbol),
+                                                    pct_change * df_neutralized_weight_symbol
+                                                    ), index=df_neutralized_weight.index)
+        # dict_df_return[symbol] = pct_change * df_neutralized_weight_symbol
         df_neutralized_weight_symbol_lag = df_neutralized_weight_symbol.shift(1)
 
-        # dict_df_trade_size[symbol] = pd.Series(
-        #     np.where(is_stop_loss,
-        #              np.where(is_stop_loss.shift(1),
-        #                       2 * abs(df_neutralized_weight_symbol),
-        #                       abs(df_neutralized_weight_symbol) + abs(
-        #                           df_neutralized_weight_symbol_lag - df_neutralized_weight_symbol)),
-        #              np.where(is_stop_loss.shift(1),
-        #                       abs(df_neutralized_weight_symbol),
-        #                       abs(df_neutralized_weight_symbol - df_neutralized_weight_symbol_lag)))
-        # )
-        dict_df_trade_size[symbol] = abs(df_neutralized_weight_symbol - df_neutralized_weight_symbol_lag)
+        dict_df_trade_size[symbol] = pd.Series(
+            np.where(is_stop_loss,
+                     np.where(is_stop_loss.shift(1),
+                              2 * abs(df_neutralized_weight_symbol),
+                              abs(df_neutralized_weight_symbol) + abs(
+                                  df_neutralized_weight_symbol_lag - df_neutralized_weight_symbol)),
+                     np.where(is_stop_loss.shift(1),
+                              abs(df_neutralized_weight_symbol),
+                              abs(df_neutralized_weight_symbol - df_neutralized_weight_symbol_lag))), index=df_neutralized_weight.index)
+        # dict_df_trade_size[symbol] = abs(df_neutralized_weight_symbol - df_neutralized_weight_symbol_lag)
 
-    df_agg['return'] = (pd.DataFrame(dict_df_return).sum(axis=1) * leverage).clip(-1, float("inf"))
-    df_agg['trade_size'] = pd.DataFrame(dict_df_trade_size).sum(axis=1) * leverage
+    df_agg['return'] = (pd.DataFrame(dict_df_return, index=df_neutralized_weight.index).sum(axis=1) * leverage).clip(-1, float("inf"))
+    df_agg['trade_size'] = pd.DataFrame(dict_df_trade_size, index=df_neutralized_weight.index).sum(axis=1) * leverage
     df_agg['fee'] = df_agg['trade_size'].mul(FEE_RATE)
     df_agg['return_net'] = (1 - df_agg['fee']) * (1 + df_agg['return']) - 1
     df_agg['cumulative_fee'] = df_agg['fee'].cumsum()
@@ -100,8 +98,8 @@ def log_backtest_result(backtest_result, date_start, date_end, is_future, is_sav
         save_backtest_result_figure(backtest_result, alpha_name, date_start, date_end, leverage, is_future)
 
 
-def backtest_for_alpha(symbols, df_weight, dict_df_klines, datetime_start, datetime_end,  leverage=1, is_future=False, is_save_figure=False):
-    backtest_result = backtest_coin_strategy(df_weight, dict_df_klines, symbols, leverage=leverage, stop_loss=-1)
+def backtest_for_alpha(symbols, df_weight, dict_df_klines, datetime_start, datetime_end,  leverage=1, stop_loss=-1, is_future=False, is_save_figure=False):
+    backtest_result = backtest_coin_strategy(df_weight, dict_df_klines, symbols, leverage=leverage, stop_loss=stop_loss)
     log_backtest_result(backtest_result, datetime_start, datetime_end, is_future, is_save_figure=is_save_figure)
 
 def fit_weight_and_klines(df_weight, dict_df_klines, df_trade_timestamp_idx, additional_timing_to_trade_idx):
@@ -118,14 +116,13 @@ def fit_weight_and_klines(df_weight, dict_df_klines, df_trade_timestamp_idx, add
         df_tmp.ffill(inplace=True)
         df_klines['new_idx'] = df_tmp['new_idx']
         df_klines['original_idx'] = df_klines.index
-
         df_klines_fit = query_on_pandas_df("""--sql
             WITH rn_added
                      AS (SELECT new_idx, timestamp, open, high, low, close, volume, new_idx, original_idx, 
                                 ROW_NUMBER() OVER (PARTITION BY new_idx ORDER BY original_idx)      rn_asc,
                                 ROW_NUMBER() OVER (PARTITION BY new_idx ORDER BY original_idx DESC) rn_desc
                          FROM df_klines)
-            SELECT CAST(new_idx AS INT)                 new_idx,                  
+            SELECT new_idx,                
                    MAX(IF(rn_asc = 1, timestamp, NULL)) timestamp_tmp, --column name issue
                    MAX(IF(rn_asc = 1, open, NULL))      open,
                    MAX(high)                            high,
@@ -133,9 +130,11 @@ def fit_weight_and_klines(df_weight, dict_df_klines, df_trade_timestamp_idx, add
                    MAX(IF(rn_desc = 1, close, NULL))    close_tmp, --column name issue
                    SUM(volume)                          volume,
             FROM rn_added
+            WHERE new_idx IS NOT NULL
             GROUP BY 1
             ORDER BY 1
         """)
+        df_klines_fit['new_idx'] = df_klines_fit['new_idx'].astype(int)
         df_klines_fit = df_klines_fit.rename(columns={'timestamp_tmp':'timestamp', 'close_tmp':'close'})
         df_klines_fit = df_klines_fit.set_index('new_idx')
         dict_df_klines_fit[symbol] = df_klines_fit
@@ -208,7 +207,7 @@ for alpha_name, alpha in dict_alphas.items():
         df_trade_timestamp_idx = list(dict_df_klines_futures.values())[0].loc[lambda x: x.timestamp.isin(pd.date_range(datetime_start, datetime_end, freq=trade_freq))].index # to restore index
         df_data_range_idx = list(dict_df_klines_futures.values())[0].loc[lambda x: x.timestamp.isin(pd.date_range(datetime_start, datetime_end, freq=data_freq))].index
         df_weight_filtered, dict_df_klines_futures_fit = fit_weight_and_klines(df_weight, dict_df_klines_futures, df_trade_timestamp_idx, additional_timing_to_trade_idx)
-        backtest_for_alpha(symbols, df_weight_filtered, dict_df_klines_futures_fit, datetime_start, datetime_end, leverage=leverage, is_future=True, is_save_figure=False)
+        backtest_for_alpha(symbols, df_weight_filtered, dict_df_klines_futures_fit, datetime_start, datetime_end, leverage=leverage, stop_loss=-1, is_future=True, is_save_figure=False)
     print()
 print('-------------------')
 
