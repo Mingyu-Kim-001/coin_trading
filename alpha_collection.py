@@ -13,6 +13,12 @@ class Alphas:
         df_agg = df_agg.fillna(0)
         return df_agg
 
+    def hold_all(self, dict_df_klines:dict):
+        df_agg = pd.concat([pd.Series([0] * len(df_klines.loc[lambda x:x.volume == 0]) + [1] * len(df_klines.loc[lambda x:x.volume > 0]), index=df_klines.index, name=symbol).rename(symbol) for symbol, df_klines in dict_df_klines.items()], axis=1)
+        df_agg = df_agg.fillna(0)
+        df_agg = df_agg.div(df_agg.sum(axis=1), axis=0)
+        return df_agg, None
+
     def close_momentum_nday_rank(self, dict_df_klines: dict, n=1):
         '''
         weight = rank(close price change compared to n days ago)
@@ -126,6 +132,65 @@ class Alphas:
         '''
         df_agg = pd.concat(
             [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).median().shift(1)) / df_klines['close'].astype('float').rolling(n).std().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight, None
+
+    def close_position_in_nday_bollinger_band_median_with_recent_data2(self, dict_df_klines:dict, n=110, weight_max=None, shift=1):
+        '''
+        weight = close position in bollinger band
+        '''
+        df_agg_list = []
+        def get_position_in_bollinger_band(df_klines, n):
+            bollinger_band_mean = df_klines['close'].rolling(n).mean().shift(1)
+            bollinger_band_std = df_klines['close'].rolling(n).std().shift(1)
+            position_in_bollinger_band = ((df_klines['close'] - bollinger_band_mean) / bollinger_band_std).shift(shift)
+            return position_in_bollinger_band
+
+        for symbol, df_klines in dict_df_klines.items():
+            position_in_bollinger_band = get_position_in_bollinger_band(df_klines, n=n)
+            recent_position_in_bollinger_band = get_position_in_bollinger_band(df_klines, n=24)
+            df_agg_symbol = position_in_bollinger_band + recent_position_in_bollinger_band
+            df_agg_symbol.rename(symbol, inplace=True)
+            df_agg_list.append(df_agg_symbol)
+        df_agg = pd.concat(df_agg_list, axis=1)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight, None
+
+    def close_position_in_nday_bollinger_band_median_with_recent_data(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
+        '''
+        weight = close position in bollinger band
+        '''
+        df_agg_list = []
+        for symbol, df_klines in dict_df_klines.items():
+            bollinger_band_mean = df_klines['close'].rolling(n).mean().shift(1)
+            bollinger_band_std = df_klines['close'].rolling(n).std().shift(1)
+            position_in_bollinger_band = ((df_klines['close'] - bollinger_band_mean) / bollinger_band_std).shift(shift).rename(symbol)
+            bear_in_24_hours = (df_klines['close'] - df_klines['close'].shift(24) < 0)
+            close_lower_than_open = (df_klines['close'] < df_klines['open'])
+            close_lower_than_open_24h_count = close_lower_than_open.rolling(24).sum()
+            df_agg_symbol = np.where((bear_in_24_hours) & (close_lower_than_open_24h_count > 16) & (position_in_bollinger_band > 0), 0, 1) * position_in_bollinger_band
+            df_agg_list.append(df_agg_symbol)
+        df_agg = pd.concat(df_agg_list, axis=1)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight, None
+
+    def close_position_in_nday_bollinger_band_median_momentum(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
+        '''
+        weight = close position in bollinger band
+        '''
+        df_agg = pd.concat(
+            [((df_klines['close'].astype('float') - df_klines['close'].astype('float').rolling(n).median().shift(1)) / df_klines['close'].astype('float').rolling(n).std().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
+             in dict_df_klines.items()], axis=1)
+        df_neutralized_weight = neutralize_weight_momentum(df_agg)
+        return df_neutralized_weight, None
+
+    def close_position_in_nday_bollinger_band_log(self, dict_df_klines:dict, n=20, weight_max=None, shift=1):
+        '''
+        weight = close position in bollinger band
+        '''
+        df_agg = pd.concat(
+            [((np.log(df_klines['close']) - np.log(df_klines['close']).rolling(n).median().shift(1)) / np.log(df_klines['close']).rolling(n).std().shift(1)).shift(shift).rename(symbol) for symbol, df_klines
              in dict_df_klines.items()], axis=1)
         df_neutralized_weight = neutralize_weight(df_agg)
         return df_neutralized_weight, None
