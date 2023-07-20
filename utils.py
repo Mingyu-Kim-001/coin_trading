@@ -27,6 +27,13 @@ def neutralize_weight(df_weight: pd.DataFrame) -> pd.DataFrame:
     df_weight_neutralized = df_weight_centered.div(df_weight_normalizer, axis=0).fillna(0)
     return df_weight_neutralized
 
+def neutralize_weight_momentum(df_weight: pd.DataFrame) -> pd.DataFrame:
+    df_weight_mean = df_weight.mean(1) * 0.9
+    df_weight_centered = df_weight.sub(df_weight_mean, axis=0)
+    df_weight_normalizer = df_weight_centered.abs().sum(1)
+    df_weight_neutralized = df_weight_centered.div(df_weight_normalizer, axis=0).fillna(0)
+    return df_weight_neutralized
+
 
 def get_possible_maximum_drawdown(df_cumulative_return):
     df_cumulative_max = df_cumulative_return.cummax()
