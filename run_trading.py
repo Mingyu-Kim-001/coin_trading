@@ -28,7 +28,6 @@ def create_order(symbol, price, quantity, leverage, is_dryrun=False):
                 side=side,
                 price=price,
                 quantity=quantity,
-                #leverage=leverage,
                 timeInForce='GTC',
                 type="LIMIT",
                 reduceOnly=False
@@ -88,17 +87,41 @@ def slack_total_quantity(quantity, is_dryrun=False, slack_token=None):
         channel = 'dryrun_total_quantity' if is_dryrun else 'total_quantity'
         send_slack_message(msg, slack_token, channel)
 
+def cancle_order_and_close_all_positions(symbols, is_dryrun=False):
+    if is_dryrun:
+        return
+    cancel_all_orders(symbols)
+    for symbol in symbols:
+        df_current_futures_position, _ = get_current_futures_position(symbols)
+        side = Client.SIDE_BUY if df_current_futures_position.loc[symbol]['positionAmt'] < 0 else Client.SIDE_SELL # close position
+        quantity = str(df_current_futures_position.loc[symbol]['positionAmt'])
+        try:
+            order_response = client.create_order(
+                symbol=symbol,
+                side=side,
+                type=Client.ORDER_TYPE_MARKET,
+                quantity=quantity
+            )
+        except Exception as e:
+            print(f"Error placing order: {e}")
+
+
 
 def order_with_quantity(df, quantity_column_name, price_column_name, is_dryrun=False, leverage=1):
     unfilled_symbols = deque(df.index)
     order_data_list = []
+    tried, try_max_cnt = 0, 100
     while unfilled_symbols:
         symbol = unfilled_symbols.popleft()
         is_success, data = create_order(symbol=symbol, price=df.loc[symbol, price_column_name], quantity=df.loc[symbol, quantity_column_name], leverage=leverage, is_dryrun=is_dryrun)
         if not is_success:
             unfilled_symbols.append(symbol)
         else:
+            tried += 1
             order_data_list.append(data)
+        if tried >= try_max_cnt:
+            cancle_order_and_close_all_positions(symbols, is_dryrun=is_dryrun)
+            break
     return order_data_list
 
 
