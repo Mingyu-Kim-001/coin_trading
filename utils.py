@@ -47,14 +47,25 @@ def get_maximum_drawdown_one_shot(df_cumulative_return):
 def round_toward_zero(x, tick_size):
     return math.floor(x / tick_size) * tick_size if x > 0 else math.ceil(x / tick_size) * tick_size
 
+def convert_to_Decimal(number):
+    return Decimal(str(number))
 
-def trim_quantity(df_quantity_and_price, usdt_column_name, price_column_name):
+def trim_quantity(symbol, usdt_amount, price):
+    with open('./futures_trading_rules/futures_trading_rules.csv', 'r') as f:
+        df_future_trading_rules = pd.read_csv(f).set_index('symbol')
+    min_qty = df_future_trading_rules.loc[symbol, 'min_qty']
+    min_notional = df_future_trading_rules.loc[symbol, 'min_notional']
+    quantity_trimmed = convert_to_Decimal(int(usdt_amount / price / min_qty)) * convert_to_Decimal(min_qty)
+    quantity_trimmed = convert_to_Decimal(0) if abs(quantity_trimmed * convert_to_Decimal(price)) < min_notional else quantity_trimmed
+    return quantity_trimmed
+
+def trim_quantity_df(df_quantity_and_price, usdt_column_name, price_column_name):
     with open('./futures_trading_rules/futures_trading_rules.csv', 'r') as f:
         df_future_trading_rules = pd.read_csv(f).set_index('symbol')
     df_quantity_and_price = df_quantity_and_price.join(df_future_trading_rules).applymap(lambda x:Decimal(str(x)))
     df_quantity_and_price['quantity_trimmed'] = (df_quantity_and_price[usdt_column_name] / df_quantity_and_price[price_column_name] / df_quantity_and_price.min_qty).astype(int).apply(lambda x:Decimal(str(x))) * df_quantity_and_price.min_qty
     df_quantity_and_price.quantity_trimmed = np.where(
-        (np.abs(df_quantity_and_price.quantity_trimmed * df_quantity_and_price[price_column_name]) < df_quantity_and_price.min_notinoal), Decimal(0),
+        (np.abs(df_quantity_and_price.quantity_trimmed * df_quantity_and_price[price_column_name]) < df_quantity_and_price.min_notional), Decimal(0),
         df_quantity_and_price.quantity_trimmed)
     df_quantity_and_price[f"{usdt_column_name}_trimmed"] = df_quantity_and_price.quantity_trimmed * df_quantity_and_price.price
     return df_quantity_and_price
