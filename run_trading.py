@@ -165,11 +165,14 @@ def cancel_order(order, symbol):
         return False
 
 def cancel_all_orders(symbols):
-    send_slack_message("Canceling all orders", slack_token, SLACK_SOMETHING_IRREGULAR_CHANNEL)
+    cancel_any = False
     for symbol in symbols:
         open_orders = client.futures_get_open_orders(symbol=symbol)
         for order in open_orders:
             cancel_order(order, symbol)
+            cancel_any = True
+    if cancel_any:
+        send_slack_message("Canceling all orders", slack_token, SLACK_SOMETHING_IRREGULAR_CHANNEL)
 
 
 def log_position(df, past_quantity_column_name, change_quantity_column_name, entry_price_column_name, current_price_column_name):
