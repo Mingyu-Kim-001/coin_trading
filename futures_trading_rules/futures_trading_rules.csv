@@ -1,4 +1,4 @@
-symbol,min_qty,min_notinoal,tick_size
+symbol,min_qty,min_notional,tick_size
 BTCUSDT,0.001,5.0,0.1
 ETHUSDT,0.001,5.0,0.01
 BCHUSDT,0.001,5.0,0.01

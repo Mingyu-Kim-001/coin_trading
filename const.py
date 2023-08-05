@@ -1,0 +1,7 @@
+SLACK_SOMETHING_IRREGULAR_CHANNEL = 'something_irregular'
+SLACK_DRYRUN_ORDER_LOG_CHANNEL = 'dryrun_order_log'
+SLACK_DRYRUN_POSITION_CHANNEL = 'dryrun_position'
+SLACK_DRYRUN_TOTAL_QUANTITY_CHANNEL = 'dryrun_total_quantity'
+SLACK_ORDER_LOG_CHANNEL = 'order_log'
+SLACK_POSITION_CHANNEL = 'position'
+SLACK_TOTAL_QUANTITY_CHANNEL = 'total_quantity'
