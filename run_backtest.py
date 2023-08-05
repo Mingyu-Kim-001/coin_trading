@@ -16,8 +16,6 @@ def get_binance_klines_data_1d(symbol, start_datetime=datetime.datetime(2017, 1,
     df_extended = df_date_dummy.merge(df, on='timestamp', how='left').fillna(0)
     for column in ['open', 'high', 'low', 'close', 'volume']:
         df_extended[column] = df_extended[column].astype(float)
-    if symbol == 'DOGEUSDT':
-        df_extended = df_extended[df_extended['timestamp'] >= pd.to_datetime('2022-01-01')]  # remove volatile data
     return df_extended
 
 
@@ -30,8 +28,6 @@ def get_binance_klines_data_1h(symbol, start_datetime=datetime.datetime(2017, 1,
     df_extended = df_date_dummy.merge(df, on='timestamp', how='left').fillna(0)
     for column in ['open', 'high', 'low', 'close', 'volume']:
         df_extended[column] = df_extended[column].astype(float)
-    # if symbol == 'DOGEUSDT':
-    #     df_extended[df_extended['timestamp'] < pd.to_datetime('2022-01-01')] = 0 # remove volatile data
     return df_extended
 
 
@@ -83,12 +79,15 @@ def save_backtest_result_figure(backtest_result, alpha_name, start_date, end_dat
     ax.plot(backtest_result['timestamp'], backtest_result['cumulative_return'], label='cumulative_return')
     ax.set_xlim([start_date, end_date])
     ax.set_yscale('log')
-    dir_name = f'./figures/spot/{alpha_name}' if not is_future else f'./figures/future/{alpha_name}'
+    n = alpha_name.rsplit('_', 1)[1] if 'nday' in alpha_name else None
+    alpha_without_n = alpha_name.rsplit('_', 1)[0] + f'/n={n}' if 'nday' in alpha_name else alpha_name
+    dir_name = f'./figures/spot/{alpha_without_n}' if not is_future else f'./figures/future/{alpha_without_n}'
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
     fig.savefig(f'{dir_name}/{start_date}~{end_date}_leverage={leverage}.png')
+    plt.close(fig)
 
-def log_backtest_result(backtest_result, date_start, date_end, is_future, is_save_figure):
+def log_backtest_result(alpha_name, backtest_result, date_start, date_end, is_future, is_save_figure):
     final_return = round(backtest_result['cumulative_return'].iloc[-1], 2)
     possible_maximum_drawdown = round(backtest_result['possible_maximum_drawdown'].min(), 2)
     one_shot_maximum_drawdown = round(backtest_result['one_shot_maximum_drawdown'].min(), 2)
@@ -98,13 +97,15 @@ def log_backtest_result(backtest_result, date_start, date_end, is_future, is_sav
         save_backtest_result_figure(backtest_result, alpha_name, date_start, date_end, leverage, is_future)
 
 
-def backtest_for_alpha(symbols, df_weight, dict_df_klines, datetime_start, datetime_end,  leverage=1, stop_loss=-1, is_future=False, is_save_figure=False):
+def backtest_for_alpha(alpha_name, symbols, df_weight, dict_df_klines, datetime_start, datetime_end,  leverage=1, stop_loss=-1, is_future=False, is_save_figure=False):
     backtest_result = backtest_coin_strategy(df_weight, dict_df_klines, symbols, leverage=leverage, stop_loss=stop_loss)
-    log_backtest_result(backtest_result, datetime_start, datetime_end, is_future, is_save_figure=is_save_figure)
+    log_backtest_result(alpha_name, backtest_result, datetime_start, datetime_end, is_future, is_save_figure=is_save_figure)
 
 def fit_weight_and_klines(df_weight, dict_df_klines, df_trade_timestamp_idx, additional_timing_to_trade_idx):
     if additional_timing_to_trade_idx is not None:
-        df_weight_filtered = df_weight.loc[lambda x:(x.index.isin(df_trade_timestamp_idx)) | (x.index.isin(additional_timing_to_trade_idx))]
+        additional_timing_to_trade_idx_fit = [idx for idx in additional_timing_to_trade_idx if
+                                              idx > df_trade_timestamp_idx[0] and idx < df_trade_timestamp_idx[-1]]
+        df_weight_filtered = df_weight.loc[lambda x:(x.index.isin(df_trade_timestamp_idx)) | (x.index.isin(additional_timing_to_trade_idx_fit))]
     else:
         df_weight_filtered = df_weight.loc[lambda x: x.index.isin(df_trade_timestamp_idx)]
     weight_index = df_weight_filtered.index
@@ -132,7 +133,7 @@ def fit_weight_and_klines(df_weight, dict_df_klines, df_trade_timestamp_idx, add
             FROM rn_added
             WHERE new_idx IS NOT NULL
             GROUP BY 1
-            ORDER BY 1
+            ORDER BY 1;
         """)
         df_klines_fit['new_idx'] = df_klines_fit['new_idx'].astype(int)
         df_klines_fit = df_klines_fit.rename(columns={'timestamp_tmp':'timestamp', 'close_tmp':'close'})
@@ -140,76 +141,61 @@ def fit_weight_and_klines(df_weight, dict_df_klines, df_trade_timestamp_idx, add
         dict_df_klines_fit[symbol] = df_klines_fit
     return df_weight_filtered, dict_df_klines_fit
 
+def run(dict_df_klines, dict_alphas, symbols, date_intervals, leverage, stop_loss, is_future, is_save_figure):
+    for alpha_name, alpha in dict_alphas.items():
+        print(alpha_name)
+        df_weight, additional_timing_to_trade_idx = alpha(dict_df_klines)
+        for datetime_start, datetime_end in date_intervals:
+            df_trade_timestamp_idx = list(dict_df_klines.values())[0].loc[lambda x: x.timestamp.isin(pd.date_range(datetime_start, datetime_end, freq=trade_freq))].index # to restore index
+            df_data_range_idx = list(dict_df_klines.values())[0].loc[lambda x: x.timestamp.isin(pd.date_range(datetime_start, datetime_end, freq=data_freq))].index
+            df_weight_filtered, dict_df_klines_fit = fit_weight_and_klines(df_weight, dict_df_klines, df_trade_timestamp_idx, additional_timing_to_trade_idx)
+            backtest_for_alpha(alpha_name, symbols, df_weight_filtered, dict_df_klines_fit, datetime_start, datetime_end, leverage=leverage, stop_loss=stop_loss, is_future=is_future, is_save_figure=is_save_figure)
+        print()
 
 
-pd.set_option('display.max_columns', 500)
-pd.set_option('display.width', 1000)
-alpahs = Alphas()
-# alpha_org_names = [alpha_name for alpha_name in alpahs.__dir__() if not alpha_name.startswith('_')]
-shift = 1
-alpha_org_names = ['close_position_in_nday_bollinger_band_median']
-dict_alphas = {}
-for alpha_name in alpha_org_names:
-    # if
-    # if alpha_name == 'close_position_in_nday_bollinger_band':
-    #     for n in [4, 20]:
-    #         dict_alphas[alpha_name + f'_{n}'] = (lambda name, n: lambda x: getattr(alpahs, name)(x, n))(alpha_name, n)
-    if 'nday' in alpha_name:
-        # for n in [3,4,5,6,7,8,10,15,20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140]:
-        for n in [70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170]:
-        # for n in [100]:
-        # for n in [60]:
-        # for n in [2]:
-        # for n in [20]:
-            dict_alphas[alpha_name + f'_{n}'] = (lambda name, n, shift: lambda x: getattr(alpahs, name)(x, n, shift=shift))(alpha_name, n, shift)
-            # if alpha_name == 'close_momentum_nday':
-            # for weight_max in [0.5, 0.7, 0.9, 1, 1.5]:
-            #     dict_alphas[alpha_name + f'_{n}_weight_max_{weight_max}'] = (lambda name, n, weight_max: lambda x: getattr(alpahs, name)(x, n, weight_max))(alpha_name, n, weight_max)
+if __name__ == '__main__':
+    pd.set_option('display.max_columns', 500)
+    pd.set_option('display.width', 1000)
+    alpahs = Alphas()
+    # alpha_org_names = [alpha_name for alpha_name in alpahs.__dir__() if not alpha_name.startswith('_')]
+    shift = 1
+    alpha_org_names = ['simple_moving_average', 'close_position_in_nday_bollinger_band_ewm', 'close_position_in_nday_bollinger_band_median']
+    dict_alphas = {}
+    for alpha_name in alpha_org_names:
+        # if
+        # if alpha_name == 'close_position_in_nday_bollinger_band':
+        #     for n in [4, 20]:
+        #         dict_alphas[alpha_name + f'_{n}'] = (lambda name, n: lambda x: getattr(alpahs, name)(x, n))(alpha_name, n)
+        if 'nday' in alpha_name:
+            # for n in [3,4,5,6,7,8,10,15,20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140]:
+            # for n in [70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180, 185, 190, 195, 200]:
+            for n in [95, 100, 105, 110, 115, 120, 125, 130, 135]:
+                dict_alphas[alpha_name + f'_{n}'] = (lambda name, n, shift: lambda x: getattr(alpahs, name)(x, n, shift=shift))(alpha_name, n, shift)
+                # if alpha_name == 'close_momentum_nday':
+                # for weight_max in [0.5, 0.7, 0.9, 1, 1.5]:
+                #     dict_alphas[alpha_name + f'_{n}_weight_max_{weight_max}'] = (lambda name, n, weight_max: lambda x: getattr(alpahs, name)(x, n, weight_max))(alpha_name, n, weight_max)
 
-    else:
-        dict_alphas[alpha_name] = getattr(alpahs, alpha_name)
+        else:
+            dict_alphas[alpha_name] = getattr(alpahs, alpha_name)
 
-
-dict_df_klines = {}
-# start_date = datetime.date(2017, 8, 17)
-# date_1 = datetime.date(2019, 1, 1)
-# date_2 = datetime.date(2020, 1, 1)
-# date_3 = datetime.date(2021, 1, 1)
-# date_4 = datetime.date(2022, 1, 1)
-# date_5 = datetime.date(2023, 1, 1)
-# end_date = datetime.date(2023, 6, 10)
-# date_interval = [[start_date, end_date], [start_date, date_1], [date_1, date_2], [date_2, date_3], [date_3, date_4], [date_4, date_5], [date_4, end_date], [date_5, end_date]]
-data_freq = '1h'
-trade_freq = '8h'
-leverage = 5
-symbols = ['BTCUSDT', 'XRPUSDT', 'ETHUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT', 'DOTUSDT']#, 'BCHUSDT']# 'BNBUSDT']
-
-
-
-
-
-dict_df_klines_futures = {}
-hour = 8
-future_start_date = datetime.datetime(2019, 9, 10, hour, 0, 0)
-# future_start_date = datetime.datetime(2020, 1, 1, 9, 0, 0)
-date_1 = datetime.datetime(2021, 1, 1, hour, 0, 0)
-date_2 = datetime.datetime(2022, 1, 1, hour, 0, 0)
-date_3 = datetime.datetime(2023, 1, 1, hour, 0, 0)
-date_4 = datetime.datetime(2023, 7, 1, hour, 0, 0)
-future_end_date = datetime.datetime(2023, 7, 14, hour, 0, 0)
-date_intervals = [[future_start_date, future_end_date], [future_start_date, date_1], [date_1, date_2], [date_2, date_3], [date_3, future_end_date], [date_2, future_end_date], [date_4, future_end_date]]
-for symbol in symbols:
-    dict_df_klines_futures[symbol] = get_binance_klines_data_1h(symbol, future_start_date, future_end_date, freq=data_freq, is_future=True)
-for alpha_name, alpha in dict_alphas.items():
-    print(alpha_name)
-    df_weight, additional_timing_to_trade_idx = alpha(dict_df_klines_futures)
-    for datetime_start, datetime_end in date_intervals:
-        df_trade_timestamp_idx = list(dict_df_klines_futures.values())[0].loc[lambda x: x.timestamp.isin(pd.date_range(datetime_start, datetime_end, freq=trade_freq))].index # to restore index
-        df_data_range_idx = list(dict_df_klines_futures.values())[0].loc[lambda x: x.timestamp.isin(pd.date_range(datetime_start, datetime_end, freq=data_freq))].index
-        df_weight_filtered, dict_df_klines_futures_fit = fit_weight_and_klines(df_weight, dict_df_klines_futures, df_trade_timestamp_idx, additional_timing_to_trade_idx)
-        backtest_for_alpha(symbols, df_weight_filtered, dict_df_klines_futures_fit, datetime_start, datetime_end, leverage=leverage, stop_loss=-1, is_future=True, is_save_figure=False)
-    print()
-print('-------------------')
+    dict_df_klines = {}
+    data_freq = '1h'
+    trade_freq = '8h'
+    leverage = 5
+    symbols = ['BTCUSDT', 'XRPUSDT', 'ETHUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT', 'DOTUSDT'] #, 'XLMUSDT']#, 'BNBUSDT', 'BCHUSDT']:
+    dict_df_klines_futures = {}
+    hour = 8
+    future_start_date = datetime.datetime(2019, 9, 10, hour, 0, 0)
+    # future_start_date = datetime.datetime(2020, 1, 1, 9, 0, 0)
+    date_1 = datetime.datetime(2021, 1, 1, hour, 0, 0)
+    date_2 = datetime.datetime(2022, 1, 1, hour, 0, 0)
+    date_3 = datetime.datetime(2023, 1, 1, hour, 0, 0)
+    date_4 = datetime.datetime(2023, 7, 1, hour, 0, 0)
+    future_end_date = datetime.datetime(2023, 7, 13, hour, 0, 0)
+    date_intervals = [[future_start_date, future_end_date], [future_start_date, date_1], [date_1, date_2], [date_2, date_3], [date_3, future_end_date], [date_2, future_end_date], [date_4, future_end_date]]
+    for symbol in symbols:
+        dict_df_klines_futures[symbol] = get_binance_klines_data_1h(symbol, future_start_date, future_end_date, freq=data_freq, is_future=True)
+    run(dict_df_klines_futures, dict_alphas, symbols, date_intervals, leverage, stop_loss=-1, is_future=True, is_save_figure=False)
 
 
 
