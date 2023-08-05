@@ -23,7 +23,7 @@ def get_futures_trading_rules():
         symbols_data.append({
             'symbol': symbol,
             'min_qty': min_qty,
-            'min_notinoal': min_notional,
+            'min_notional': min_notional,
             'tick_size': tick_size
         })
 
