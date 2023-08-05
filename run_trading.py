@@ -9,6 +9,7 @@ from utils import *
 from decimal import Decimal
 import time
 import csv
+from const import *
 
 
 def get_current_futures_position(symbols):
@@ -18,8 +19,9 @@ def get_current_futures_position(symbols):
     max_withdraw_amount = float(account_info['maxWithdrawAmount'])
     return df_futures_position, max_withdraw_amount
 
-def create_order(symbol, price, quantity, leverage, is_dryrun=False):
-    side = "BUY" if quantity > 0 else "SELL"
+def create_order(symbol, price, quantity, leverage, side=None, is_dryrun=False):
+    if side is None:
+        side = "BUY" if quantity > 0 else "SELL"
     quantity = str(abs(Decimal(str(quantity))))
     if not is_dryrun and quantity != '0':
         try:
@@ -68,7 +70,7 @@ def slack_order(order_data_list, is_dryrun=False, slack_token=None):
         for row in rows:
             message += " | ".join(cell.ljust(width) for cell in row)
             message += "\n"
-        channel = 'dryrun_order_log' if is_dryrun else 'order_log'
+        channel = SLACK_DRYRUN_ORDER_LOG_CHANNEL if is_dryrun else SLACK_TOTAL_QUANTITY_CHANNEL
         send_slack_message(message, slack_token, channel)
 
 
@@ -84,7 +86,7 @@ def log_total_quantity(quantity):
 def slack_total_quantity(quantity, is_dryrun=False, slack_token=None):
     if slack_token:
         msg = f'Total quantity: {quantity}'
-        channel = 'dryrun_total_quantity' if is_dryrun else 'total_quantity'
+        channel = SLACK_DRYRUN_TOTAL_QUANTITY_CHANNEL if is_dryrun else SLACK_TOTAL_QUANTITY_CHANNEL
         send_slack_message(msg, slack_token, channel)
 
 def cancle_order_and_close_all_positions(symbols, is_dryrun=False):
@@ -94,18 +96,41 @@ def cancle_order_and_close_all_positions(symbols, is_dryrun=False):
     for symbol in symbols:
         df_current_futures_position, _ = get_current_futures_position(symbols)
         side = Client.SIDE_BUY if df_current_futures_position.loc[symbol]['positionAmt'] < 0 else Client.SIDE_SELL # close position
-        quantity = str(df_current_futures_position.loc[symbol]['positionAmt'])
+        quantity = str(abs(df_current_futures_position.loc[symbol]['positionAmt']))
         try:
-            order_response = client.create_order(
+            order_response = client.futures_create_order(
                 symbol=symbol,
                 side=side,
                 type=Client.ORDER_TYPE_MARKET,
                 quantity=quantity
             )
+            position = 'LONG' if side == Client.SIDE_BUY else 'SHORT'
+            msg = f"Force-closed position for {position} {symbol} {quantity}"
+            send_slack_message(msg, slack_token, SLACK_SOMETHING_IRREGULAR_CHANNEL)
+            print(msg)
         except Exception as e:
             print(f"Error placing order: {e}")
 
+def get_remaining_orders(symbols):
+    open_orders = {}
+    for symbol in symbols:
+        open_orders_symbol = client.futures_get_open_orders(symbol=symbol)
+        if len(open_orders_symbol) > 0:
+            open_orders[symbol] = open_orders_symbol[0] #length is always 1
+    return open_orders
 
+def renew_order_if_not_meet(symbols):
+    open_orders = get_remaining_orders(symbols)
+    if len(open_orders) == 0:
+        return True
+    current_price = {symbol: float(client.futures_ticker(symbol=symbol)['lastPrice']) for symbol in open_orders.keys()}
+    for symbol, order in open_orders.items():
+        canceled = cancel_order(order, symbol)
+        if canceled:
+            usdt_amount = float(order['origQty']) * float(order['price'])
+            adjusted_quantity_trimmed = trim_quantity(symbol, usdt_amount, current_price[symbol])
+            create_order(symbol=symbol, price=current_price[symbol], quantity=adjusted_quantity_trimmed, leverage=order['leverage'], is_dryrun=is_dryrun, side=order['side'])
+    return False
 
 def order_with_quantity(df, quantity_column_name, price_column_name, is_dryrun=False, leverage=1):
     unfilled_symbols = deque(df.index)
@@ -125,16 +150,27 @@ def order_with_quantity(df, quantity_column_name, price_column_name, is_dryrun=F
     return order_data_list
 
 
+def cancel_order(order, symbol):
+    order_id = order['orderId']
+    cancel_response = client.futures_cancel_order(symbol=symbol, orderId=order_id)
+    if cancel_response['status'] == 'CANCELED':
+        msg = f"Order {order_id} ({order['side']} {order['origQty']} {symbol} with price {order['price']}) canceled successfully."
+        print(msg)
+        send_slack_message(msg, slack_token, SLACK_SOMETHING_IRREGULAR_CHANNEL)
+        return True
+    else:
+        msg = f"Failed to cancel order {order_id}. Error: {cancel_response['msg']}"
+        print(msg)
+        send_slack_message(msg, slack_token, SLACK_SOMETHING_IRREGULAR_CHANNEL)
+        return False
+
 def cancel_all_orders(symbols):
+    send_slack_message("Canceling all orders", slack_token, SLACK_SOMETHING_IRREGULAR_CHANNEL)
     for symbol in symbols:
         open_orders = client.futures_get_open_orders(symbol=symbol)
         for order in open_orders:
-            order_id = order['orderId']
-            cancel_response = client.futures_cancel_order(symbol=symbol, orderId=order_id)
-            if cancel_response['status'] == 'CANCELED':
-                print(f"Order {order_id} canceled successfully.")
-            else:
-                print(f"Failed to cancel order {order_id}. Error: {cancel_response['msg']}")
+            cancel_order(order, symbol)
+
 
 def log_position(df, past_quantity_column_name, change_quantity_column_name, entry_price_column_name, current_price_column_name):
     csv_file = './logs/position.csv'
@@ -166,7 +202,7 @@ def slack_position(df, past_quantity_column_name, change_quantity_column_name, e
         for row in rows:
             message += " | ".join(cell.ljust(width) for cell, width in zip(row, column_widths))
             message += "\n"
-        channel = 'dryrun_position' if is_dryrun else 'position'
+        channel = SLACK_DRYRUN_POSITION_CHANNEL if is_dryrun else SLACK_POSITION_CHANNEL
         send_slack_message(message, slack_token, channel)
 
 
@@ -200,10 +236,10 @@ if __name__ == '__main__':
         for symbol in symbols:
             client.futures_change_leverage(symbol=symbol, leverage=str(leverage))
     alphas = alpha_collection.Alphas()
-    past_price = {symbol: [float(kline[4]) for kline in client.futures_historical_klines(symbol, '1h', '112 hours ago UTC')[:-1]] for symbol in symbols}
+    past_price = {symbol: [float(kline[4]) for kline in client.futures_historical_klines(symbol, '1h', '127 hours ago UTC')[:-1]] for symbol in symbols}
     current_price = {symbol: float(client.futures_ticker(symbol=symbol)['lastPrice']) for symbol in symbols}
     dict_df_close = {symbol: pd.DataFrame({'close': past_price[symbol] + [current_price[symbol]]}) for symbol in symbols}
-    df_weight = pd.DataFrame(alphas.close_position_in_nday_bollinger_band_median(dict_df_close, n=110, shift=0)[0].iloc[-1].T.rename('next_position_usdt'))
+    df_weight = pd.DataFrame(alphas.close_position_in_nday_bollinger_band_ewm(dict_df_close, n=125, shift=0)[0].iloc[-1].T.rename('next_position_usdt'))
     df_current_price_and_amount = pd.DataFrame.from_dict(current_price, orient='index', columns=['price']).join(df_current_futures_position)
     total_quantity_usdt = ((df_current_price_and_amount['positionAmt'].abs() * df_current_price_and_amount['price']).sum() / old_leverage + max_withdraw_amount)
     trading_quantity_usdt = (total_quantity_usdt - budget_keep) * budget_allocation
@@ -212,7 +248,7 @@ if __name__ == '__main__':
         .assign(current_position_usdt=lambda x: x.positionAmt * x.price)\
         .assign(changing_position_usdt=lambda x: x.next_position_usdt - x.current_position_usdt)\
         .assign(margin_increase=lambda x: x.next_position_usdt.abs() - x.current_position_usdt.abs())
-    df_quantity_and_price_trimmed = trim_quantity(df_quantity_and_price, usdt_column_name='changing_position_usdt', price_column_name='price').sort_values('margin_increase')
+    df_quantity_and_price_trimmed = trim_quantity_df(df_quantity_and_price, usdt_column_name='changing_position_usdt', price_column_name='price').sort_values('margin_increase')
     order_data_list = order_with_quantity(df_quantity_and_price_trimmed, quantity_column_name='quantity_trimmed', price_column_name='price', leverage=leverage, is_dryrun=is_dryrun)
     if not is_dryrun:
         log_total_quantity(total_quantity_usdt)
@@ -225,4 +261,9 @@ if __name__ == '__main__':
     slack_position(df_quantity_and_price_trimmed, past_quantity_column_name='positionAmt',
                    change_quantity_column_name='quantity_trimmed', entry_price_column_name='entryPrice',
                    current_price_column_name='price', is_dryrun=is_dryrun, slack_token=slack_token)
+    while len(get_remaining_orders(symbols)) > 0:
+        time.sleep(900)
+        is_all_filled = renew_order_if_not_meet(symbols, is_dryrun=is_dryrun)
+        if is_all_filled:
+            break
     print()
