@@ -70,7 +70,7 @@ def slack_order(order_data_list, is_dryrun=False, slack_token=None):
         for row in rows:
             message += " | ".join(cell.ljust(width) for cell in row)
             message += "\n"
-        channel = SLACK_DRYRUN_ORDER_LOG_CHANNEL if is_dryrun else SLACK_TOTAL_QUANTITY_CHANNEL
+        channel = SLACK_DRYRUN_ORDER_LOG_CHANNEL if is_dryrun else SLACK_ORDER_LOG_CHANNEL
         send_slack_message(message, slack_token, channel)
 
 
