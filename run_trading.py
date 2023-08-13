@@ -266,7 +266,7 @@ if __name__ == '__main__':
                    current_price_column_name='price', is_dryrun=is_dryrun, slack_token=slack_token)
     while len(get_remaining_orders(symbols)) > 0:
         time.sleep(900)
-        is_all_filled = renew_order_if_not_meet(symbols, is_dryrun=is_dryrun)
+        is_all_filled = renew_order_if_not_meet(symbols)
         if is_all_filled:
             break
     print()
