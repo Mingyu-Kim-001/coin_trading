@@ -119,7 +119,7 @@ def get_remaining_orders(symbols):
             open_orders[symbol] = open_orders_symbol[0] #length is always 1
     return open_orders
 
-def renew_order_if_not_meet(symbols):
+def renew_order_if_not_meet(symbols, leverage):
     open_orders = get_remaining_orders(symbols)
     if len(open_orders) == 0:
         return True
@@ -129,7 +129,10 @@ def renew_order_if_not_meet(symbols):
         if canceled:
             usdt_amount = float(order['origQty']) * float(order['price'])
             adjusted_quantity_trimmed = trim_quantity(symbol, usdt_amount, current_price[symbol])
-            create_order(symbol=symbol, price=current_price[symbol], quantity=adjusted_quantity_trimmed, leverage=order['leverage'], is_dryrun=is_dryrun, side=order['side'])
+            create_order(symbol=symbol, price=current_price[symbol], quantity=adjusted_quantity_trimmed, leverage=leverage, is_dryrun=is_dryrun, side=order['side'])
+            msg = f"Renewed order for {order['side']} {symbol} {adjusted_quantity_trimmed}"
+            print(msg)
+            send_slack_message(msg, slack_token, SLACK_SOMETHING_IRREGULAR_CHANNEL)
     return False
 
 def order_with_quantity(df, quantity_column_name, price_column_name, is_dryrun=False, leverage=1):
@@ -266,7 +269,7 @@ if __name__ == '__main__':
                    current_price_column_name='price', is_dryrun=is_dryrun, slack_token=slack_token)
     while len(get_remaining_orders(symbols)) > 0:
         time.sleep(900)
-        is_all_filled = renew_order_if_not_meet(symbols)
+        is_all_filled = renew_order_if_not_meet(symbols, leverage)
         if is_all_filled:
             break
     print()
