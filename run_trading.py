@@ -267,7 +267,7 @@ if __name__ == '__main__':
     slack_position(df_quantity_and_price_trimmed, past_quantity_column_name='positionAmt',
                    change_quantity_column_name='quantity_trimmed', entry_price_column_name='entryPrice',
                    current_price_column_name='price', is_dryrun=is_dryrun, slack_token=slack_token)
-    while len(get_remaining_orders(symbols)) > 0:
+    while not is_dryrun and len(get_remaining_orders(symbols)) > 0:
         time.sleep(900)
         is_all_filled = renew_order_if_not_meet(symbols, leverage)
         if is_all_filled:
