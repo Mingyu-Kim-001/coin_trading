@@ -130,7 +130,7 @@ def renew_order_if_not_meet(symbols, leverage):
             usdt_amount = float(order['origQty']) * float(order['price'])
             adjusted_quantity_trimmed = trim_quantity(symbol, usdt_amount, current_price[symbol])
             create_order(symbol=symbol, price=current_price[symbol], quantity=adjusted_quantity_trimmed, leverage=leverage, is_dryrun=is_dryrun, side=order['side'])
-            msg = f"Renewed order for {order['side']} {symbol} {adjusted_quantity_trimmed}"
+            msg = f"Renewed order into {order['side']} {symbol} {adjusted_quantity_trimmed} at price {current_price[symbol]}"
             print(msg)
             send_slack_message(msg, slack_token, SLACK_SOMETHING_IRREGULAR_CHANNEL)
     return False
@@ -157,7 +157,7 @@ def cancel_order(order, symbol):
     order_id = order['orderId']
     cancel_response = client.futures_cancel_order(symbol=symbol, orderId=order_id)
     if cancel_response['status'] == 'CANCELED':
-        msg = f"Order {order_id} ({order['side']} {order['origQty']} {symbol} with price {order['price']}) canceled successfully."
+        msg = f"Order {order_id} ({order['side']} {order['origQty']} {symbol} at price {order['price']}) canceled successfully."
         print(msg)
         send_slack_message(msg, slack_token, SLACK_SOMETHING_IRREGULAR_CHANNEL)
         return True
