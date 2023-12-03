@@ -92,7 +92,8 @@ def log_backtest_result(alpha_name, backtest_result, date_start, date_end, is_fu
     possible_maximum_drawdown = round(backtest_result['possible_maximum_drawdown'].min(), 2)
     one_shot_maximum_drawdown = round(backtest_result['one_shot_maximum_drawdown'].min(), 2)
     win_rate = round(sum(backtest_result['return'] > 0) / len(backtest_result.loc[lambda x: x['return'] != 0]), 4)
-    print(date_start, '~', date_end, 'final_return', final_return, ', possible_maximum_drawdown', possible_maximum_drawdown, ', one_shot_maximum_drawdown', one_shot_maximum_drawdown, ', win_rate', win_rate)
+    sharp_ratio = round(backtest_result['return'].mean() / backtest_result['return'].std(), 2)
+    print(date_start, '~', date_end, 'final_return', final_return, ', possible_maximum_drawdown', possible_maximum_drawdown, ', one_shot_maximum_drawdown', one_shot_maximum_drawdown, ', win_rate', win_rate, ', sharp_ratio', sharp_ratio)
     if is_save_figure:
         save_backtest_result_figure(backtest_result, alpha_name, date_start, date_end, leverage, is_future)
 
@@ -141,7 +142,7 @@ def fit_weight_and_klines(df_weight, dict_df_klines, df_trade_timestamp_idx, add
         dict_df_klines_fit[symbol] = df_klines_fit
     return df_weight_filtered, dict_df_klines_fit
 
-def run(dict_df_klines, dict_alphas, symbols, date_intervals, leverage, stop_loss, is_future, is_save_figure):
+def run_single_alpha_consequently(dict_df_klines, dict_alphas, symbols, date_intervals, leverage, stop_loss, is_future, is_save_figure):
     for alpha_name, alpha in dict_alphas.items():
         print(alpha_name)
         df_weight, additional_timing_to_trade_idx = alpha(dict_df_klines)
@@ -152,6 +153,7 @@ def run(dict_df_klines, dict_alphas, symbols, date_intervals, leverage, stop_los
             backtest_for_alpha(alpha_name, symbols, df_weight_filtered, dict_df_klines_fit, datetime_start, datetime_end, leverage=leverage, stop_loss=stop_loss, is_future=is_future, is_save_figure=is_save_figure)
         print()
 
+# def run_combine_alphas()
 
 if __name__ == '__main__':
     pd.set_option('display.max_columns', 500)
@@ -159,7 +161,9 @@ if __name__ == '__main__':
     alpahs = Alphas()
     # alpha_org_names = [alpha_name for alpha_name in alpahs.__dir__() if not alpha_name.startswith('_')]
     shift = 1
-    alpha_org_names = ['simple_moving_average', 'close_position_in_nday_bollinger_band_ewm', 'close_position_in_nday_bollinger_band_median']
+    alpha_org_names = ['simple_rsi', 'close_position_in_nday_bollinger_band_median']
+    alpha_org_names = ['simple_rsi']
+    alpha_org_names = ['simple_volume_nday']
     dict_alphas = {}
     for alpha_name in alpha_org_names:
         # if
@@ -167,9 +171,9 @@ if __name__ == '__main__':
         #     for n in [4, 20]:
         #         dict_alphas[alpha_name + f'_{n}'] = (lambda name, n: lambda x: getattr(alpahs, name)(x, n))(alpha_name, n)
         if 'nday' in alpha_name:
-            # for n in [3,4,5,6,7,8,10,15,20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140]:
+            for n in [3,4,5,6,7,8,10,15,20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140]:
             # for n in [70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180, 185, 190, 195, 200]:
-            for n in [95, 100, 105, 110, 115, 120, 125, 130, 135]:
+            # for n in [95, 100, 105, 110, 115, 120, 125, 130, 135]:
                 dict_alphas[alpha_name + f'_{n}'] = (lambda name, n, shift: lambda x: getattr(alpahs, name)(x, n, shift=shift))(alpha_name, n, shift)
                 # if alpha_name == 'close_momentum_nday':
                 # for weight_max in [0.5, 0.7, 0.9, 1, 1.5]:
@@ -181,7 +185,7 @@ if __name__ == '__main__':
     dict_df_klines = {}
     data_freq = '1h'
     trade_freq = '8h'
-    leverage = 5
+    leverage = 1
     symbols = ['BTCUSDT', 'XRPUSDT', 'ETHUSDT', 'DOGEUSDT', 'LTCUSDT', 'MATICUSDT', 'TRXUSDT', 'ADAUSDT', 'SOLUSDT', 'DOTUSDT'] #, 'XLMUSDT']#, 'BNBUSDT', 'BCHUSDT']:
     dict_df_klines_futures = {}
     hour = 8
@@ -190,12 +194,12 @@ if __name__ == '__main__':
     date_1 = datetime.datetime(2021, 1, 1, hour, 0, 0)
     date_2 = datetime.datetime(2022, 1, 1, hour, 0, 0)
     date_3 = datetime.datetime(2023, 1, 1, hour, 0, 0)
-    date_4 = datetime.datetime(2023, 7, 1, hour, 0, 0)
-    future_end_date = datetime.datetime(2023, 7, 13, hour, 0, 0)
+    date_4 = datetime.datetime(2023, 9, 1, hour, 0, 0)
+    future_end_date = datetime.datetime(2023, 9, 30, hour, 0, 0)
     date_intervals = [[future_start_date, future_end_date], [future_start_date, date_1], [date_1, date_2], [date_2, date_3], [date_3, future_end_date], [date_2, future_end_date], [date_4, future_end_date]]
     for symbol in symbols:
         dict_df_klines_futures[symbol] = get_binance_klines_data_1h(symbol, future_start_date, future_end_date, freq=data_freq, is_future=True)
-    run(dict_df_klines_futures, dict_alphas, symbols, date_intervals, leverage, stop_loss=-1, is_future=True, is_save_figure=False)
+    run_single_alpha_consequently(dict_df_klines_futures, dict_alphas, symbols, date_intervals, leverage, stop_loss=-1, is_future=True, is_save_figure=False)
 
 
 

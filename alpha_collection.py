@@ -74,15 +74,15 @@ class Alphas:
         df_neutralized_weight = neutralize_weight(df_rank)
         return df_neutralized_weight
 
-    def simple_volume_nday(self, dict_df_klines: dict, n=20):
+    def simple_volume_nday(self, dict_df_klines: dict, n=20, shift=1):
         '''
         weight = volume / nday volume mean
         '''
         df_agg = pd.concat(
-            [(df_klines['volume'].astype('float') / df_klines['volume'].astype('float').rolling(n).mean()).shift(1).rename(symbol) for symbol, df_klines
+            [(df_klines['volume'].astype('float') / df_klines['volume'].astype('float').rolling(n).mean()).shift(shift).rename(symbol) for symbol, df_klines
              in dict_df_klines.items()], axis=1)
         df_neutralized_weight = neutralize_weight(df_agg)
-        return df_neutralized_weight
+        return df_neutralized_weight, None
 
     def correlation_open_close_nday(self, dict_df_klines:dict, n=10):
         '''
@@ -379,6 +379,27 @@ class Alphas:
         df_agg = pd.concat(df_agg_list, axis=1)
         df_neutralized_weight = neutralize_weight(df_agg)
         return df_neutralized_weight, None
+    
+    def simple_rsi(self, dict_df_klines, n=48, shift=1):
+        '''
+        weight = rsi
+        '''
+        df_agg_list = []
+        for symbol, df_klines in dict_df_klines.items():
+            # df_klines['returns'] = df_klines['close'].astype('float').pct_change(1)
+            df_klines['close_change'] = df_klines['close'].astype('float').diff(1)
+            df_klines['up'] = np.where(df_klines['close_change'] > 0, df_klines['close_change'], 0)
+            df_klines['down'] = np.where(df_klines['close_change'] < 0, df_klines['close_change'], 0)
+            df_klines['up_avg'] = df_klines['up'].ewm(span=n, adjust=False).mean().abs()
+            df_klines['down_avg'] = df_klines['down'].ewm(span=n, adjust=False).mean().abs()
+            df_klines['rs'] = df_klines['up_avg'] / df_klines['down_avg']
+            df_klines['rsi'] = 100 - (100 / (1 + df_klines['rs']))
+            df_klines['rsi_shift'] = df_klines['rsi'].shift(shift)
+            df_agg_symbol = pd.Series(np.where(df_klines['rsi_shift'] > 70, -df_klines['rsi_shift'], np.where(df_klines['rsi_shift'] < 30, -df_klines['rsi_shift'], 0)), index=df_klines.index).rename(symbol)
+            df_agg_list.append(df_agg_symbol)
+        df_agg = pd.concat(df_agg_list, axis=1)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight, None
 
     def alpha_1_nday(self, dict_df_klines, n=20, shift=1):
         '''
@@ -502,11 +523,11 @@ if __name__ == '__main__':
     symbols = ['BTCUSDT', 'ETHUSDT']
     start_date = '2022-01-01'
     end_date = '2022-06-30'
-    alpha_name = 'alpha_7'
+    alpha_name = 'simple_rsi'
     backtest = market_neutral_trading_backtest_binance()
     dict_df_klines = {}
     for symbol in symbols:
-        dict_df_klines[symbol] = backtest.get_binance_klines_data_1d(symbol, start_date, end_date)
+        dict_df_klines[symbol] = backtest.get_binance_klines_data_1h(symbol, start_date, end_date)
     alpahs = Alphas()
     alpha = getattr(alpahs, alpha_name)
     df_weight = alpha(dict_df_klines)

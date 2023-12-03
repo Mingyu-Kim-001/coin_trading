@@ -74,3 +74,13 @@ def send_slack_message(text, slack_token, channel_name):
     requests.post("https://slack.com/api/chat.postMessage",
                   headers={"Authorization": "Bearer " + slack_token},
                   data={"channel": channel_name, "text": text})
+    
+def calculate_rsi(df_klines, lookback_n=14):
+    returns = df_klines['close'].astype('float').pct_change(1)
+    up = np.where(returns > 0, returns, 0)
+    down = np.where(returns < 0, returns, 0)
+    up_avg = up.rolling(lookback_n).mean()
+    down_avg = down.abs().rolling(lookback_n).mean()
+    rs = up_avg / down_avg
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
