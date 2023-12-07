@@ -34,4 +34,4 @@ trading_rules = get_futures_trading_rules()
 
 # Create DataFrame
 df = pd.DataFrame(trading_rules)
-df.to_csv('../futures_trading_rules/futures_trading_rules.csv', index=False)
+df.to_csv('./futures_trading_rules/futures_trading_rules.csv', index=False)

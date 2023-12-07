@@ -215,9 +215,9 @@ def slack_position(df, past_quantity_column_name, change_quantity_column_name, e
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Receive input')
     parser.add_argument('--dryrun', default=True, help='dryrun', type=lambda x: x.lower() != 'false')
-    parser.add_argument('--leverage', default=7, help='leverage', type=int)
+    parser.add_argument('--leverage', default=4, help='leverage', type=int)
     parser.add_argument('--budget_allocation', default=0.64, help='budget_allocation', type=float)
-    parser.add_argument('--budget_keep', default=0, help='budget_keep', type=float)
+    parser.add_argument('--budget_keep', default=600, help='budget_keep', type=float)
     parser.add_argument('--api_key', help='api_key')
     parser.add_argument('--api_secret', help='api_secret')
     parser.add_argument('--slack_token', help='slack_token')
