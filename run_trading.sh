@@ -1,5 +1,4 @@
 #!/bin/zsh
-echo $SHELL
 dryrun=$1
 leverage=$2
 budget_allocation=$3
