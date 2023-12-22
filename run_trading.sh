@@ -5,7 +5,7 @@ budget_allocation=$3
 budget_keep=$4
 script_dir=$(dirname "$0")
 cd "$script_dir" || exit
-. ./env_file
-. ./venv/bin/activate
+. ./env
+eval "${PYTHON_VIRTUALENV_ACTIVATE_COMMAND}"
 echo `date`
 python3 ./run_trading.py --dryrun "$dryrun" --leverage "$leverage"  --budget_allocation "$budget_allocation" --budget_keep "$budget_keep" --api_key "$BINANCE_API_KEY" --api_secret "$BINANCE_SECRET_API_KEY" --slack_token "$SLACK_TOKEN"
