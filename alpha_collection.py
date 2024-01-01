@@ -400,6 +400,41 @@ class Alphas:
         df_agg = pd.concat(df_agg_list, axis=1)
         df_neutralized_weight = neutralize_weight(df_agg)
         return df_neutralized_weight, None
+    
+    def control_chart_rule1(self, dict_df_klines, n=10, shift=1):
+        '''
+        https://wire.insiderfinance.io/trading-the-stock-market-in-an-unconventional-way-using-control-charts-f6e9aca3d8a0
+        '''
+        df_agg_list = []
+        for symbol, df_klines in dict_df_klines.items():
+            df_klines['sma'] = df_klines['close'].astype('float').rolling(n)
+            df_klines['3std'] = 3 * df_klines['close'].astype('float').rolling(n).std()
+            df_klines['signal'] = np.where(df_klines['close'].astype('float') > df_klines['sma'] + df_klines['3std'], 1, np.where(df_klines['close'].astype('float') < df_klines['sma'] - df_klines['3std'], -1, 0))
+            df_agg_symbol = df_klines['signal'].shift(shift).rename(symbol)
+            df_agg_list.append(df_agg_symbol)
+        df_agg = pd.concat(df_agg_list, axis=1)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight, None
+    
+
+    def control_chart_rule2(self, dict_df_klines, n=10, shift=1):
+        '''
+        Eight or more points on one side of the centerline without crossing
+        '''
+        df_agg_list = []
+        for symbol, df_klines in dict_df_klines.items():
+            df_klines['sma'] = df_klines['close'].astype('float').rolling(n)
+            for side in ['upper', 'lower']:
+                df_klines['count_' + side] = (df_klines['close'] > df_klines['sma']) if side == 'upper' else (df_klines['close'] < df_klines['sma'])
+                df_klines['count_' + side] = df_klines['count_' + side].astype('int').rolling(8).sum()
+            df_klines['signal'] = np.where(df_klines['count_upper'] >= 8, 1, np.where(df_klines['count_lower'] >= 8, -1, 0))
+            df_agg_symbol = df_klines['signal'].shift(shift).rename(symbol)
+            df_agg_list.append(df_agg_symbol)
+        df_agg = pd.concat(df_agg_list, axis=1)
+        df_neutralized_weight = neutralize_weight(df_agg)
+        return df_neutralized_weight, None
+
+
 
     def alpha_1_nday(self, dict_df_klines, n=20, shift=1):
         '''

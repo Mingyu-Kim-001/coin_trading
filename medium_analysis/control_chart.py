@@ -150,27 +150,27 @@ def apply_rule_6(df, window=DEFAULT_WINDOW):
 
 
 # %%
-df = yf.download('SOXS', period='60d', interval='5m')
+df = yf.download('UPRO', period='60d', interval='5m')
 df.rename(columns={'Close': 'close', 'Open': 'open',
           'High': 'high', 'Low': 'low', 'Volume': 'volume'}, inplace=True)
 df['feature'] = signal.detrend(df['Adj Close'])
 
-# df = apply_rule_1(df)
-# show_result(df, 'rule1')
+df = apply_rule_1(df)
+show_result(df, 'rule1')
 
 df = apply_rule_2(df)
 show_result(df, 'rule2')
 
-# df = apply_rule_3(df)
-# show_result(df, 'rule3')
-
-# df = apply_rule_4(df)
-# show_result(df, 'rule4')
+df = apply_rule_3(df)
+show_result(df, 'rule3')
+# 
+df = apply_rule_4(df)
+show_result(df, 'rule4')
 
 df = apply_rule_5(df)
 show_result(df, 'rule5')
 
-# df = apply_rule_6(df)
-# show_result(df, 'rule6')
+df = apply_rule_6(df)
+show_result(df, 'rule6')
 
 # %%

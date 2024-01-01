@@ -30,6 +30,17 @@ def get_binance_klines_data_1h(symbol, start_datetime=datetime.datetime(2017, 1,
         df_extended[column] = df_extended[column].astype(float)
     return df_extended
 
+def get_binance_klines_data_1m(symbol, start_datetime=datetime.datetime(2017, 1, 1, 9, 0, 0),
+                               end_datetime=datetime.datetime(2022, 6, 1, 0, 0, 0), freq='1m', is_future=False):
+    with open(f'./coin_backdata_hourly/{"f" + symbol if is_future else symbol}.csv', 'r') as f:
+        df = pd.read_csv(f)
+        df['timestamp'] = df['timestamp'].apply(lambda x: datetime.datetime.strptime(x, '%Y-%m-%d %H:%M:%S'))
+    df_date_dummy = pd.DataFrame({'timestamp': pd.date_range(start_datetime, end_datetime, freq=freq)})
+    df_extended = df_date_dummy.merge(df, on='timestamp', how='left').fillna(0)
+    for column in ['open', 'high', 'low', 'close', 'volume']:
+        df_extended[column] = df_extended[column].astype(float)
+    return df_extended
+
 
 def backtest_coin_strategy(df_neutralized_weight, dict_df_klines, symbols, stop_loss=-1,
                            leverage=1):
@@ -162,8 +173,7 @@ if __name__ == '__main__':
     # alpha_org_names = [alpha_name for alpha_name in alpahs.__dir__() if not alpha_name.startswith('_')]
     shift = 1
     alpha_org_names = ['simple_rsi', 'close_position_in_nday_bollinger_band_median']
-    alpha_org_names = ['simple_rsi']
-    alpha_org_names = ['simple_volume_nday']
+    alpha_org_names = ['control_chart_rule1']
     dict_alphas = {}
     for alpha_name in alpha_org_names:
         # if

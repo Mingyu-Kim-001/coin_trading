@@ -102,11 +102,11 @@ pd.set_option('display.width', 1000)
 
 
 interval = "1m"
-for is_future in [True]:
+for is_future in [False]:
     client = BinanceClient(futures=is_future)
     for symbol in ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'MATICUSDT', 'SOLUSDT', 'LTCUSDT', 'TRXUSDT', 'DOTUSDT', 'BNBUSDT', 'BCHUSDT', 'XLMUSDT', '1000SHIBUSDT']:
         start_date = datetime(2023, 6, 1, 0, 0)
-        end_date = datetime(2023, 11, 30, 9, 0)
+        end_date = datetime(2023, 12, 20, 0, 0)
         fromDate = int(start_date.timestamp() * 1000)
         toDate = int(end_date.timestamp() * 1000)
         data = GetHistoricalData(client, symbol, fromDate, toDate, interval=interval)
@@ -117,4 +117,8 @@ for is_future in [True]:
             existing_data = pd.DataFrame(columns=['date', 'time', 'open', 'high', 'low', 'close', 'volume', 'timestamp']).set_index('timestamp')
         new_rows = df[df.index > (existing_data.index.max() if len(existing_data) > 0 else pd.to_datetime(0))]
         updated_data = pd.concat([existing_data, new_rows])
-        updated_data.to_csv(f"./coin_backdata_hourly/{'f' if is_future else ''}{symbol}.csv")
+        if interval == '1m':
+            updated_data.to_csv(f"./coin_backdata_minutely/{'f' if is_future else ''}{symbol}.csv")
+        elif interval == '1h':
+            updated_data.to_csv(f"./coin_backdata_hourly/{'f' if is_future else ''}{symbol}.csv")
+            
