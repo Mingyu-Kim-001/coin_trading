@@ -108,18 +108,24 @@ if __name__ == '__main__':
   symbols = SYMBOLS
   freq = '10T' # 10 minutes
   for symbol in symbols:
-    dict_df_klines[symbol] = get_binance_klines_data_1m(symbol, datetime.date(2021, 1, 1), datetime.date(2021, 12, 25), is_future=True)
+    dict_df_klines[symbol] = get_binance_klines_data_1m(symbol, datetime.date(2020, 11, 1), datetime.date(2023 , 12, 25), is_future=True)
     dict_df_klines[symbol] = data_freq_convert(dict_df_klines[symbol], freq)
   # calculate weight
-  alpha_names = ['control_chart_rule1', 'control_chart_rule2', 'control_chart_rule3', 'control_chart_rule4', 'control_chart_rule5', 'control_chart_rule6']
+  alpha_names = ['control_chart_rule2', 'control_chart_rule3', 'control_chart_rule4', 'control_chart_rule5', 'control_chart_rule6']
   # alpha_names = ['control_chart_rule2']
   get_weight_from_alphas = [getattr(alphas, alpha_name) for alpha_name in alpha_names]
   for get_weight_from_alpha in get_weight_from_alphas:
-    df_weight = dict_df_klines[symbols[0]][['timestamp']].copy()
+    df_weight = pd.DataFrame()
     for symbol in symbols:
       df_weight_symbol = get_weight_from_alpha(dict_df_klines[symbol]).rename(columns={'weight': symbol})
-      df_weight_symbol[symbol] = df_weight_symbol[symbol] / len(symbols)
-      df_weight = df_weight.merge(df_weight_symbol, on='timestamp', how='left')
-    df_result = get_backtest_result(df_weight, dict_df_klines, symbols)
+      df_weight = pd.concat([df_weight, df_weight_symbol[symbol]], axis=1) / len(symbols)
+    df_weight_neutralized = neutralize_weight(df_weight)
+    df_timestamp = dict_df_klines[symbols[0]][['timestamp']].copy()
+    df_weight_with_timestamp = pd.concat([df_timestamp, df_weight], axis=1)
+    df_weight_with_timestamp_neutralized = pd.concat([df_timestamp, df_weight_neutralized], axis=1)
+    df_result = get_backtest_result(df_weight_with_timestamp, dict_df_klines, symbols)
     print("final result :", df_result.cumulative_return.iloc[-1])
+    df_result_neutralized = get_backtest_result(df_weight_with_timestamp_neutralized, dict_df_klines, symbols)
+    print("final result neutralized :", df_result_neutralized.cumulative_return.iloc[-1])
+
   
