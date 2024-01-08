@@ -126,11 +126,14 @@ def run(symbol:str, is_future:bool, year:int, month:int, freq='1m', is_overwrite
     except:
       existing_data = pd.DataFrame(columns=['date', 'time', 'open', 'high', 'low', 'close', 'volume', 'timestamp']).set_index('timestamp')
     existing_latest_timestamp = datetime.datetime.strptime(existing_data.index.max(), '%Y-%m-%d %H:%M:%S') if len(existing_data) > 0 else None
-    if existing_latest_timestamp < month_end_datetime or existing_latest_timestamp is None:
+    if existing_latest_timestamp is None or existing_latest_timestamp < month_end_datetime:
       data = GetHistoricalData(client, symbol, start_timestamp, end_timestamp, interval=freq)
       df = GetDataFrame(data)
-      new_rows = df[df.index > existing_latest_timestamp]
-      updated_data = pd.concat([existing_data, new_rows])
+      if existing_latest_timestamp is None:
+        updated_data = df
+      else:
+        new_rows = df[df.index > existing_latest_timestamp]
+        updated_data = pd.concat([existing_data, new_rows])
     else:
       print(f"Skipping {symbol} {year}/{str(month).zfill(2)} since it is already up-to-date.")
       return
@@ -146,10 +149,10 @@ def run(symbol:str, is_future:bool, year:int, month:int, freq='1m', is_overwrite
 if __name__ == '__main__':
   interval = "1m"
   is_overwrite = False
-  start_year_month = '2023-12'
+  start_year_month = '2020-01'
   end_year_month = '2023-12'
   for is_future in [False, True]:
-    for symbol in SYMBOLS:
+    for symbol in ['LINKUSDT', 'WBTCUSDT', 'BCHUSDT', 'ATOMUSDT']:
       for year_month in pd.date_range(datetime.datetime.strptime(start_year_month, '%Y-%m'), datetime.datetime.strptime(end_year_month, '%Y-%m'), freq='MS'):
         year, month = int(year_month.year), int(year_month.month)
         run(symbol, is_future, year, month, freq='1m', is_overwrite=is_overwrite)
