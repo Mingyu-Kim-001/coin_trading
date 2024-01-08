@@ -12,8 +12,6 @@ CASH = 10_000
 
 
 # %%
-
-
 def show_result(df, signal_field):
 
     # Remove all rows without operations, rows with the same consecutive operation, first row selling, and last row buying

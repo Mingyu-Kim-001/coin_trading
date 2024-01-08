@@ -29,6 +29,8 @@ def get_binance_klines_data_1m(symbol, start_datetime=datetime.date, end_datetim
     year, month = year_month.year, year_month.month
     month_start_datetime = datetime.datetime(year, month, 1, 0, 0, 0)
     month_end_datetime = last_minute_of_month(year, month)
+    if not os.path.exists(f'./coin_backdata_minutely/{year}/{str(month).zfill(2)}/{filename}'):
+      continue
     with open(f'./coin_backdata_minutely/{year}/{str(month).zfill(2)}/{filename}', 'r') as f:
       df = pd.read_csv(f)
       df['timestamp'] = df['timestamp'].apply(
