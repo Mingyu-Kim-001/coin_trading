@@ -19,14 +19,7 @@ def get_binance_klines_data_1h(symbol, start_datetime=datetime.datetime(2017, 1,
   return df_extended
 
 
-def data_freq_convert(df:pd.DataFrame, freq:str):
-  """
-  Convert data frequency(in the direction of decreasing frequency)
-  """
-  df = df.set_index('timestamp')
-  df = df.resample(freq).agg({'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'})
-  df = df.reset_index()
-  return df
+
 
 
 def get_backtest_result(df_weight, dict_df_klines, symbols, stop_loss=-1,

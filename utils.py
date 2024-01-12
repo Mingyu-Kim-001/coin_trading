@@ -129,13 +129,14 @@ def get_binance_klines_data_1m(symbol, start_datetime=datetime.date, end_datetim
   """
   filename = ('f' if is_future else '') + symbol + '.csv'
   df_whole = pd.DataFrame()
+  base_dir = os.path.abspath(__file__).replace('utils.py', '')
   for year_month in pd.date_range(datetime.datetime(start_datetime.year, start_datetime.month, 1, 0, 0, 0), datetime.datetime(end_datetime.year, end_datetime.month, 2, 0, 0, 0), freq='MS'):
     year, month = year_month.year, year_month.month
     month_start_datetime = datetime.datetime(year, month, 1, 0, 0, 0)
     month_end_datetime = last_minute_of_month(year, month)
-    if not os.path.exists(f'./coin_backdata_minutely/{year}/{str(month).zfill(2)}/{filename}'):
+    if not os.path.exists(f'{base_dir}/coin_backdata_minutely/{year}/{str(month).zfill(2)}/{filename}'):
       continue
-    with open(f'./coin_backdata_minutely/{year}/{str(month).zfill(2)}/{filename}', 'r') as f:
+    with open(f'{base_dir}/coin_backdata_minutely/{year}/{str(month).zfill(2)}/{filename}', 'r') as f:
       df = pd.read_csv(f)
       df['timestamp'] = df['timestamp'].apply(
         lambda x: datetime.datetime.strptime(x, '%Y-%m-%d %H:%M:%S'))
@@ -147,3 +148,13 @@ def get_binance_klines_data_1m(symbol, start_datetime=datetime.date, end_datetim
       df_extended[column] = df_extended[column].astype(float)
     df_whole = pd.concat([df_whole, df_extended])
   return df_whole.reset_index(drop=True)
+
+
+def data_freq_convert(df:pd.DataFrame, freq:str):
+  """
+  Convert data frequency(in the direction of decreasing frequency)
+  """
+  df = df.set_index('timestamp')
+  df = df.resample(freq).agg({'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'})
+  df = df.reset_index()
+  return df
