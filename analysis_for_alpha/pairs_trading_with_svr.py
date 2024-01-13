@@ -108,6 +108,7 @@ pca_comps = [1, 2] # number of principal components to use
 # %%
 from joblib import Parallel, delayed
 import multiprocessing 
+import os
 
 def store_results(pca_comp,beta,lookback, lock):
   # results = pd.DataFrame(columns=columns)
@@ -144,26 +145,30 @@ def store_results(pca_comp,beta,lookback, lock):
   datatmp['lookback'] = lookback
   datatmp['pca_comp'] = pca_comp
   with lock:
-    datatmp.to_csv('data_2.csv', mode='a', header=False)
+    if os.path.exists('data_2.csv') == False:
+      datatmp.to_csv('data_2.csv', index=False)
+      results.to_csv('results_2.csv', index=False)
+    else:
+      datatmp.to_csv('data_2.csv', mode='a', header=False)
     results.to_csv('results_2.csv', mode='a', header=False)
 
 
 
 # %%
 param_list = list(product(pca_comps, betas, lookbacks))
-param_exclude_list = [(0.1, 20, 1), (0.3,20,1), (0.3,40,1), (0.1,40,1), (0.1,30,1), (0.3,30,1)]
+param_exclude_list = []
 params_list = [param for param in param_list if param not in param_exclude_list]
 def run_multiprocessing_tasks(processes):
   # Use a Manager to create a shared Lock
   with multiprocessing.Manager() as manager:
-      lock = manager.Lock()
+    lock = manager.Lock()
 
-      # Set up a pool of workers
-      with multiprocessing.Pool(processes) as pool:
-        # Map the store_results function to the parameter combinations
-        # Pass the lock as one of the arguments to each call
-        tasks = [(pca_comp, beta, lookback, lock) for pca_comp, beta, lookback in params_list]
-        pool.starmap(store_results, tasks)
+    # Set up a pool of workers
+    with multiprocessing.Pool(processes) as pool:
+      # Map the store_results function to the parameter combinations
+      # Pass the lock as one of the arguments to each call
+      tasks = [(pca_comp, beta, lookback, lock) for pca_comp, beta, lookback in params_list]
+      pool.starmap(store_results, tasks)
 
 # This check is crucial for multiprocessing on macOS and Windows
 if __name__ == '__main__':
