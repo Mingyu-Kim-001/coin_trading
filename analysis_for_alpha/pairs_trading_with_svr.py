@@ -16,11 +16,12 @@ symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'MATICUSDT', 
 # %%
 dict_df_klines = {}
 for symbol in symbols:
-  dict_df_klines[symbol] = get_binance_klines_data_1m(symbol, datetime.date(2022, 2, 1), datetime.date(2022 , 2, 28), is_future=True)
+  dict_df_klines[symbol] = get_binance_klines_data_1m(symbol, datetime.date(2022, 1, 1), datetime.date(2023 , 12, 31), is_future=True)
   dict_df_klines[symbol] = data_freq_convert(dict_df_klines[symbol], '30T')
+timestamp = dict_df_klines[symbols[0]]['timestamp']
 print("Data loaded")
 # %%
-data = pd.DataFrame()  
+data = pd.DataFrame()
 for symbol in symbols:
   data[symbol] = dict_df_klines[symbol]['close']
 
@@ -28,7 +29,7 @@ for symbol in symbols:
 data = (data.pct_change()+1).cumprod()
 data = data.iloc[1:]
 data = data / data.iloc[0]
-data
+
 # %%
 # input data
 predict_symbol = 'BTCUSDT'
@@ -44,9 +45,9 @@ pca = PCA(n_components=10)
 pca.fit(Xtmp)
 
 n_comp = np.arange(1,11)
-# plt.plot(n_comp, pca.explained_variance_ratio_)
+plt.plot(n_comp, pca.explained_variance_ratio_)
 # %%
-# pca.explained_variance_ratio_
+pca.explained_variance_ratio_
 
 # %%
 from sklearn.svm import SVR
@@ -65,6 +66,7 @@ def compute_votes(data, pca_comp, beta, lookback, Cs, gammas, epsilons):
   daily_votes = np.zeros(len(data.index))
 
   for t in tqdm(range(lookback,len(data.index)-1)):
+  # for t in range(lookback,len(data.index)-1):
     predictions = []
     for C,gamma,epsilon in product(Cs,gammas,epsilons):
       # print("t", t, "C", C, "gamma", gamma, "epsilon", epsilon)
@@ -101,14 +103,12 @@ lookbacks = [20, 30, 40, 50] # how many last trading days to include in model tr
 pca_comps = [1, 2] # number of principal components to use
 
 # %%
-from multiprocessing import Pool
-# columns = ['Beta', 'Lookback', 'PCA components', 'Num wins', 'Num losses', 'Pct Win', 
-      #  'Avg Win', 'Avg Loss', 'Total Return', 'APR', 'Sharpe', 'Correlation with traded asset']
+from joblib import Parallel, delayed
+import multiprocessing 
 
-
-# for i, (pca_comp,beta,lookback) in enumerate(product(pca_comps,betas,lookbacks)):
-def store_results(pca_comp,beta,lookback):
+def store_results(pca_comp,beta,lookback, lock):
   # results = pd.DataFrame(columns=columns)
+  print("pca_comp", pca_comp, "beta", beta, "lookback", lookback)
   daily_votes = compute_votes(data, pca_comp=pca_comp, beta=beta, lookback=lookback, 
                 Cs=Cs, gammas=gammas, epsilons=epsilons)
   
@@ -136,29 +136,33 @@ def store_results(pca_comp,beta,lookback):
                 'Avg Win':avg_win, 'Avg Loss':avg_loss, 'Total Return':total_return, 
                 'APR':apr, 'Sharpe':sharpe, 'Correlation with traded asset':corrcoef}, index=[0])
   # put results in csv file
-  results.to_csv('results_jan.csv', mode='a', header=False)
+  datatmp['timestamp'] = timestamp[lookback+50:]
+  datatmp['beta'] = beta
+  datatmp['lookback'] = lookback
+  datatmp['pca_comp'] = pca_comp
+  with lock:
+    datatmp.to_csv('data.csv', mode='a', header=False)
+    results.to_csv('results.csv', mode='a', header=False)
 
 
 
 # %%
-# Create a list of all parameter combinations
-params_list = list(product(pca_comps, betas, lookbacks))
+param_list = list(product(pca_comps, betas, lookbacks))
+param_exclude_list = [(0.1, 20, 1), (0.3,20,1), (0.3,40,1), (0.1,40,1), (0.1,30,1), (0.3,30,1)]
+params_list = [param for param in param_list if param not in param_exclude_list]
+def run_multiprocessing_tasks(processes):
+    # Use a Manager to create a shared Lock
+    with multiprocessing.Manager() as manager:
+        lock = manager.Lock()
 
-# Create a Pool of processes
-with Pool() as p:
-  # Use the Pool's map function to run the process_parameters function for each set of parameters
-  p.map(store_results, params_list)
-# %%
-# results
-# %%
-# daily_votes = compute_votes(data, pca_comp=1, beta=0.5, lookback=20, 
-                            # Cs=Cs, gammas=gammas, epsilons=epsilons)
-    # 
-# datatmp = data[[predict_symbol]].iloc[lookback+50:].copy() # skip first 50 days
-# datatmp['vote'] = daily_votes[lookback+50:]
-# datatmp['vote'] = datatmp['vote'].shift()
-# datatmp['target_returns'] = datatmp[predict_symbol].pct_change()
-# datatmp['alg_returns'] = (np.sign(datatmp['vote']) * datatmp['target_returns'])
-# datatmp['alg_cumret'] = np.cumprod(datatmp['alg_returns']+1)
-# datatmp.dropna(inplace=True)
+        # Set up a pool of workers
+        with multiprocessing.Pool(processes) as pool:
+            # Map the store_results function to the parameter combinations
+            # Pass the lock as one of the arguments to each call
+            tasks = [(pca_comp, beta, lookback, lock) for pca_comp, beta, lookback in params_list]
+            pool.starmap(store_results, tasks)
+
+# This check is crucial for multiprocessing on macOS and Windows
+if __name__ == '__main__':
+    run_multiprocessing_tasks(6)
 # %%
