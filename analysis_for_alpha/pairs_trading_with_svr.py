@@ -15,8 +15,11 @@ symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'MATICUSDT', 
 
 # %%
 dict_df_klines = {}
+year = 2022
+date_start = datetime.date(year-1, 12, 30)
+date_end = datetime.date(year, 12, 31)
 for symbol in symbols:
-  dict_df_klines[symbol] = get_binance_klines_data_1m(symbol, datetime.date(2022, 1, 1), datetime.date(2023 , 12, 31), is_future=True)
+  dict_df_klines[symbol] = get_binance_klines_data_1m(symbol,date_start, date_end, is_future=True)
   dict_df_klines[symbol] = data_freq_convert(dict_df_klines[symbol], '30T')
 timestamp = dict_df_klines[symbols[0]]['timestamp']
 print("Data loaded")
@@ -131,18 +134,18 @@ def store_results(pca_comp,beta,lookback, lock):
   sharpe = np.sqrt(252)*datatmp['alg_returns'].mean() / datatmp['alg_returns'].std()
   corrcoef = np.corrcoef(datatmp['target_returns'], datatmp['alg_returns'])[0,1]
   
-  results = pd.DataFrame({'Beta':beta, 'Lookback':lookback, 'PCA components':pca_comp, 
-                'Num wins':num_wins, 'Num losses':num_losses, 'Pct Win':pct_win, 
-                'Avg Win':avg_win, 'Avg Loss':avg_loss, 'Total Return':total_return, 
-                'APR':apr, 'Sharpe':sharpe, 'Correlation with traded asset':corrcoef}, index=[0])
+  results = pd.DataFrame({'beta':beta, 'lookback':lookback, 'n_pca_comp':pca_comp, 
+                'n_wins':num_wins, 'n_losses':num_losses, 'pct_win':pct_win, 
+                'avg_win':avg_win, 'avg_loss':avg_loss, 'total_return':total_return, 
+                'apr':apr, 'sharpe':sharpe, 'corr_with_trade_assets':corrcoef, 'year': year}, index=[0])
   # put results in csv file
   datatmp['timestamp'] = timestamp[lookback+50:]
   datatmp['beta'] = beta
   datatmp['lookback'] = lookback
   datatmp['pca_comp'] = pca_comp
   with lock:
-    datatmp.to_csv('data.csv', mode='a', header=False)
-    results.to_csv('results.csv', mode='a', header=False)
+    datatmp.to_csv('data_2.csv', mode='a', header=False)
+    results.to_csv('results_2.csv', mode='a', header=False)
 
 
 
@@ -164,5 +167,5 @@ def run_multiprocessing_tasks(processes):
 
 # This check is crucial for multiprocessing on macOS and Windows
 if __name__ == '__main__':
-    run_multiprocessing_tasks(6)
+    run_multiprocessing_tasks(4)
 # %%
