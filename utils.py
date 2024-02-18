@@ -6,6 +6,7 @@ import math
 import requests
 import os
 import datetime
+from config import FEE_RATE
 
 
 def query_on_pandas_df(str_query: str, **kwargs) -> pd.DataFrame:
@@ -22,6 +23,17 @@ def query_on_pandas_df(str_query: str, **kwargs) -> pd.DataFrame:
 
 
 def neutralize_weight(df_weight: pd.DataFrame) -> pd.DataFrame:
+  """
+  Neutralizes the weight of a DataFrame by subtracting the mean weight from each row,
+  dividing by the sum of the absolute values of the centered weights, and filling any
+  missing values with 0.
+
+  Parameters:
+  - df_weight (pd.DataFrame): The DataFrame containing the weights to be neutralized.
+
+  Returns:
+  - pd.DataFrame: The DataFrame with the neutralized weights.
+  """
   df_weight_mean = df_weight.mean(1)
   df_weight_centered = df_weight.sub(df_weight_mean, axis=0)
   df_weight_normalizer = df_weight_centered.abs().sum(1)
@@ -158,3 +170,51 @@ def data_freq_convert(df:pd.DataFrame, freq:str):
   df = df.resample(freq).agg({'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'})
   df = df.reset_index()
   return df
+
+
+def get_backtest_result(df_weight, dict_df_klines, symbols, stop_loss=-1,
+            leverage=1):
+  dict_df_return, dict_df_trade_size = {}, {}
+  df_timestamp = list(dict_df_klines.values())[0]
+  df_result = pd.DataFrame(df_timestamp, columns=['timestamp'])
+  for symbol in symbols:
+    df_weight_symbol = df_weight[symbol]
+    df_klines = dict_df_klines[symbol]
+    pct_change = df_klines['close'].pct_change().fillna(0).replace([-np.inf, np.inf], 0)
+    daily_maximum_drawdown = (dict_df_klines[symbol]['low'] - dict_df_klines[symbol]['open']) / \
+      dict_df_klines[symbol]['open']
+
+    # return calculation
+    # is_stop_loss = ((df_weight_symbol < 0) & (
+      # daily_maximum_drawdown < stop_loss))
+    # stop_loss_return = -abs(stop_loss * df_weight_symbol)
+    naive_return = pct_change * df_weight_symbol
+    # dict_df_return[symbol] = pd.Series(
+      # np.where(is_stop_loss, stop_loss_return, naive_return), index=df_weight.index)
+    dict_df_return[symbol] = naive_return
+
+    # trade size calculation
+    # df_neutralized_weight_symbol_lag = df_weight_symbol.shift(1)
+    # stop_loss_trade_size = np.where(is_stop_loss.shift(1), 2 * abs(df_weight_symbol), abs(
+      # df_weight_symbol) + abs(df_neutralized_weight_symbol_lag - df_weight_symbol))
+    # naive_trade_size = np.where(is_stop_loss.shift(1),
+                  # abs(df_weight_symbol),
+                  # abs(df_weight_symbol - df_neutralized_weight_symbol_lag))
+    # dict_df_trade_size[symbol] = pd.Series(
+      # np.where(is_stop_loss, stop_loss_trade_size, naive_trade_size), index=df_weight.index)
+    dict_df_trade_size[symbol] = abs(df_weight_symbol.shift(1) - df_weight_symbol)
+
+  df_result['return'] = (pd.DataFrame(dict_df_return, index=df_weight.index).sum(
+    axis=1) * leverage).clip(-1, float("inf"))
+  df_result['trade_size'] = pd.DataFrame(
+    dict_df_trade_size, index=df_weight.index).sum(axis=1) * leverage
+  df_result['fee'] = df_result['trade_size'].mul(FEE_RATE)
+  df_result['return_net'] = (1 - df_result['fee']) * (1 + df_result['return']) - 1
+  df_result['cumulative_fee'] = df_result['fee'].cumsum()
+  df_result['cumulative_return'] = (1 + df_result['return_net']).cumprod()
+  df_result['possible_maximum_drawdown'] = get_possible_maximum_drawdown(
+    df_result['cumulative_return'])
+  df_result['one_shot_maximum_drawdown'] = get_maximum_drawdown_one_shot(
+    df_result['cumulative_return'])
+
+  return df_result

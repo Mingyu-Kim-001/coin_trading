@@ -2,7 +2,7 @@ import datetime
 import pandas as pd
 from utils import *
 import alpha_collection_v2 as alphas
-from const import FEE_RATE, SYMBOLS
+from config import FEE_RATE, SYMBOLS
 import time
 
 def get_binance_klines_data_1h(symbol, start_datetime=datetime.datetime(2017, 1, 1, 9, 0, 0),
@@ -71,18 +71,12 @@ def get_backtest_result(df_weight, dict_df_klines, symbols, stop_loss=-1,
 
   return df_result
 
-
-if __name__ == '__main__':
+def run(symbols: list, date_start:datetime.date, date_end:datetime.date, raw_data_freq, is_future:bool, alpha_names:list):
   # get historical data
   dict_df_klines = {}
-  symbols = SYMBOLS
-  freq = '10T' # 10 minutes
   for symbol in symbols:
-    dict_df_klines[symbol] = get_binance_klines_data_1m(symbol, datetime.date(2020, 11, 1), datetime.date(2023 , 12, 25), is_future=True)
-    dict_df_klines[symbol] = data_freq_convert(dict_df_klines[symbol], freq)
-  # calculate weight
-  alpha_names = ['control_chart_rule2', 'control_chart_rule3', 'control_chart_rule4', 'control_chart_rule5', 'control_chart_rule6']
-  # alpha_names = ['control_chart_rule2']
+    dict_df_klines[symbol] = get_binance_klines_data_1m(symbol, date_start, date_end, is_future=True)
+    dict_df_klines[symbol] = data_freq_convert(dict_df_klines[symbol], raw_data_freq)
   get_weight_from_alphas = [getattr(alphas, alpha_name) for alpha_name in alpha_names]
   for get_weight_from_alpha in get_weight_from_alphas:
     df_weight = pd.DataFrame()
@@ -97,5 +91,21 @@ if __name__ == '__main__':
     print("final result :", df_result.cumulative_return.iloc[-1])
     df_result_neutralized = get_backtest_result(df_weight_with_timestamp_neutralized, dict_df_klines, symbols)
     print("final result neutralized :", df_result_neutralized.cumulative_return.iloc[-1])
+
+
+
+if __name__ == '__main__':
+  # symbols = SYMBOLS
+  symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'MATICUSDT', 'SOLUSDT', 'LTCUSDT', 'TRXUSDT', 'DOTUSDT', 'BNBUSDT']
+  raw_data_freq = '30T'
+  date_start = datetime.date(2021, 1, 1)
+  date_end = datetime.date(2023, 12, 31)
+  # alpha_names = ['control_chart_rule2', 'control_chart_rule3', 'control_chart_rule4', 'control_chart_rule5', 'control_chart_rule6']
+  # run(symbols=symbols, date_start=date_start, date_end=date_end, raw_data_freq=raw_data_freq, is_future=True, alpha_names=alpha_names)
+  df_weight = pd.DataFrame()
+  for symbol in symbols:
+    df_weight_symbol = alphas.pairs_trading_with_svr_offilne(2023, symbol)
+    df_weight = pd.concat([df_weight, df_weight_symbol['vote']], axis=1) / len(symbols)
+
 
   

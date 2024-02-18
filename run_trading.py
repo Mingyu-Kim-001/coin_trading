@@ -9,7 +9,7 @@ from utils import *
 from decimal import Decimal
 import time
 import csv
-from const import *
+from config import *
 
 
 def get_current_futures_position(symbols):

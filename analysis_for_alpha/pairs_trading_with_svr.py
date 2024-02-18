@@ -10,6 +10,9 @@ import datetime
 from utils import get_binance_klines_data_1m, data_freq_convert
 import warnings
 from tqdm import tqdm
+import argparse
+from sklearn.decomposition import PCA
+
 warnings.filterwarnings('ignore')
 symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'MATICUSDT', 'SOLUSDT', 'LTCUSDT', 'TRXUSDT', 'DOTUSDT', 'BNBUSDT']
 
@@ -41,16 +44,15 @@ s = [col for col in data.columns if col not in [predict_symbol]]
 y = [predict_symbol]
 
 # %%
-from sklearn.decomposition import PCA
 
-Xtmp = data[s] # select data without the target asset
-pca = PCA(n_components=10)
-pca.fit(Xtmp)
+# Xtmp = data[s] # select data without the target asset
+# pca = PCA(n_components=10)
+# pca.fit(Xtmp)
 
-n_comp = np.arange(1,11)
-plt.plot(n_comp, pca.explained_variance_ratio_)
-# %%
-pca.explained_variance_ratio_
+# n_comp = np.arange(1,11)
+# plt.plot(n_comp, pca.explained_variance_ratio_)
+# # %%
+# pca.explained_variance_ratio_
 
 # %%
 from sklearn.svm import SVR
@@ -149,8 +151,8 @@ def store_results(pca_comp,beta,lookback, lock):
       datatmp.to_csv('data_2.csv', index=False)
       results.to_csv('results_2.csv', index=False)
     else:
-      datatmp.to_csv('data_2.csv', mode='a', header=False)
-    results.to_csv('results_2.csv', mode='a', header=False)
+      datatmp.to_csv('data_2.csv', mode='a', header=False, index=False)
+      results.to_csv('results_2.csv', mode='a', header=False, index=False)
 
 
 
@@ -170,7 +172,15 @@ def run_multiprocessing_tasks(processes):
       tasks = [(pca_comp, beta, lookback, lock) for pca_comp, beta, lookback in params_list]
       pool.starmap(store_results, tasks)
 
+# %%
+
+# %%
 # This check is crucial for multiprocessing on macOS and Windows
 if __name__ == '__main__':
-  run_multiprocessing_tasks(4)
+  argparse = argparse.ArgumentParser()
+  argparse.add_argument('--processes', type=int, default=4)
+  args = argparse.parse_args()
+  run_multiprocessing_tasks(args.processes)
+# %%
+
 # %%

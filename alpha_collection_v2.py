@@ -1,6 +1,7 @@
 import pandas as pd
 from utils import *
 from run_backtest_v2 import get_binance_klines_data_1m
+from pathlib import Path
 
 
 def close_position_in_nday_bollinger_band_ewm(df_kline: dict, window=110, weight_max=None, shift=1):
@@ -174,6 +175,16 @@ def control_chart_rule6(df_kline, window=10, shift=1):
   return df_weight
 
 
+def pairs_trading_with_svr_offilne(year, symbol):
+  df_weight = pd.DataFrame()
+  offline_data_path = Path(__file__).parent / 'alpha_weight_offline' / 'pairs_trading_svr'
+  # df_symbol = pd.read_csv(f'./pairs_trading_with_svr_data/data_raw_{symbol}_2023.csv')
+  df_symbol = pd.read_csv(offline_data_path / f'data_raw_{symbol}_{year}.csv')
+  df_symbol = df_symbol.loc[lambda x:x.timestamp.str.contains(f'{year}')]
+  df_symbol_weight = df_symbol[['vote', 'timestamp']]
+  return df_symbol_weight
+
+    
 
 # for debug
 if __name__ == '__main__':

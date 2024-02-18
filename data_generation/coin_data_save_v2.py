@@ -4,7 +4,7 @@ import requests
 from typing import *
 import time
 from utils import *
-from const import SYMBOLS
+from config import SYMBOLS
 
 pd.set_option('display.max_columns', 500)
 pd.set_option('display.width', 1000)
@@ -149,10 +149,10 @@ def run(symbol:str, is_future:bool, year:int, month:int, freq='1m', is_overwrite
 if __name__ == '__main__':
   interval = "1m"
   is_overwrite = False
-  start_year_month = '2020-01'
+  start_year_month = '2023-12'
   end_year_month = '2023-12'
   for is_future in [False, True]:
-    for symbol in ['LINKUSDT', 'WBTCUSDT', 'BCHUSDT', 'ATOMUSDT']:
+    for symbol in SYMBOLS + ['LINKUSDT', 'WBTCUSDT', 'BCHUSDT', 'ATOMUSDT']:
       for year_month in pd.date_range(datetime.datetime.strptime(start_year_month, '%Y-%m'), datetime.datetime.strptime(end_year_month, '%Y-%m'), freq='MS'):
         year, month = int(year_month.year), int(year_month.month)
         run(symbol, is_future, year, month, freq='1m', is_overwrite=is_overwrite)
